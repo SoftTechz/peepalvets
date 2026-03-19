@@ -1,0 +1,24 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Firebase credentials
+firebase_adminsdk.json
+backend/app/core/firebase_adminsdk.json
+
+.history/
+
+# Python
+backend/.venv/
+__pycache__/
+
+# Node
+frontend/node_modules/
+frontend/dist/
