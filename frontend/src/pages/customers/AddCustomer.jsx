@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../app/layout/DashboardLayout";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ClipboardList, PawPrint, UserPlus, Users } from "lucide-react";
 import { createCustomer } from "../../services/customer_service";
 import toast from "react-hot-toast";
 import Select from "react-select";
+import ModuleHeader from "@/components/ui/ModuleHeader";
+import SectionHeader from "@/components/ui/SectionHeader";
 
 const PET_TYPE_OPTIONS = ["Dog", "Cat", "Rabbit", "Bird", "Reptile", "Other"];
 
@@ -16,12 +18,17 @@ export default function AddCustomer() {
     phoneNumber: "",
     address: "",
     petName: "",
-    petAge: "",
+    petAgeYears: "",
+    petAgeMonths: "",
     petType: "",
     petBreed: "",
     petSex: "",
-    petWeight: "",
     vaccinated: "",
+    vaccinationStartDate: "",
+    vaccinationEndDate: "",
+    deworming: "",
+    dewormingStartDate: "",
+    dewormingNextDueDate: "",
     notes: "",
   });
 
@@ -62,14 +69,48 @@ export default function AddCustomer() {
     }
 
     if (
-      formData.petAge.trim() &&
-      (!/^\d+$/.test(formData.petAge.trim()) || Number(formData.petAge) <= 0)
+      formData.petAgeYears.trim() &&
+      (!/^\d+$/.test(formData.petAgeYears.trim()) ||
+        Number(formData.petAgeYears) < 0)
     ) {
-      newErrors.petAge = "Pet age must be a valid positive number.";
+      newErrors.petAgeYears =
+        "Pet age (years) must be a valid non-negative number.";
     }
 
-    if (formData.petWeight.trim() && Number(formData.petWeight) <= 0) {
-      newErrors.petWeight = "Pet weight must be greater than zero.";
+    if (
+      formData.petAgeMonths.trim() &&
+      (!/^\d+$/.test(formData.petAgeMonths.trim()) ||
+        Number(formData.petAgeMonths) < 0 ||
+        Number(formData.petAgeMonths) > 11)
+    ) {
+      newErrors.petAgeMonths = "Pet age (months) must be between 0 and 11.";
+    }
+
+    if (
+      !formData.petAgeYears.trim() &&
+      !formData.petAgeMonths.trim() &&
+      (formData.petName.trim() ||
+        formData.petType.trim() ||
+        formData.petBreed.trim() ||
+        formData.petSex.trim())
+    ) {
+      newErrors.petAgeYears = "Please enter pet age in years or months.";
+    }
+
+    if (formData.vaccinated === "Yes" && !formData.vaccinationStartDate) {
+      newErrors.vaccinationStartDate = "Vaccination date is required.";
+    }
+
+    if (formData.vaccinated === "Yes" && !formData.vaccinationEndDate) {
+      newErrors.vaccinationEndDate = "Vaccination next due date is required.";
+    }
+
+    if (formData.deworming === "Yes" && !formData.dewormingStartDate) {
+      newErrors.dewormingStartDate = "Deworming start date is required.";
+    }
+
+    if (formData.deworming === "Yes" && !formData.dewormingNextDueDate) {
+      newErrors.dewormingNextDueDate = "Deworming next due date is required.";
     }
 
     setErrors(newErrors);
@@ -91,12 +132,23 @@ export default function AddCustomer() {
         phone: formData.phoneNumber.trim(),
         address: formData.address.trim(),
         petName: formData.petName.trim(),
-        petAge: formData.petAge ? Number(formData.petAge) : null,
+        petAgeYears: formData.petAgeYears ? Number(formData.petAgeYears) : null,
+        petAgeMonths: formData.petAgeMonths
+          ? Number(formData.petAgeMonths)
+          : null,
         petType: formData.petType.trim(),
         petBreed: formData.petBreed.trim(),
         petSex: formData.petSex,
-        petWeight: formData.petWeight ? Number(formData.petWeight) : null,
         vaccinated: formData.vaccinated.trim(),
+        vaccinationStartDate:
+          formData.vaccinated === "Yes" ? formData.vaccinationStartDate : null,
+        vaccinationEndDate:
+          formData.vaccinated === "Yes" ? formData.vaccinationEndDate : null,
+        deworming: formData.deworming.trim(),
+        dewormingStartDate:
+          formData.deworming === "Yes" ? formData.dewormingStartDate : null,
+        dewormingNextDueDate:
+          formData.deworming === "Yes" ? formData.dewormingNextDueDate : null,
         notes: formData.notes.trim(),
       };
       console.log("Submitting Customer Payload:", payload);
@@ -105,7 +157,16 @@ export default function AddCustomer() {
       navigate("/customers");
     } catch (error) {
       console.error("Error creating customer:", error);
-      toast.error("Failed to add patient. Please try again.");
+      const detail = error?.response?.data?.detail;
+      if (error?.response?.status === 409) {
+        setErrors((prev) => ({
+          ...prev,
+          phoneNumber: detail || "Phone number already exists.",
+        }));
+        toast.error(detail || "Phone number already exists.");
+      } else {
+        toast.error("Failed to add patient. Please try again.");
+      }
     }
   };
 
@@ -113,12 +174,11 @@ export default function AddCustomer() {
     <DashboardLayout>
       <div className="w-full">
         <div className="bg-white rounded-2xl shadow-lg p-8">
-          <form onSubmit={handleSubmit} className="space-y-8">
-            {/* Center the Heading and underline */}
-            <div className="mb-6 flex items-center justify-between gap-4">
-              <h1 className="text-3xl font-bold text-gray-800">
-                Add New Patient
-              </h1>
+          <ModuleHeader
+            icon={<Users size={22} />}
+            title="Add New Patient"
+            tagline="Create a new patient profile"
+            action={
               <button
                 type="button"
                 onClick={() => navigate("/customers")}
@@ -127,13 +187,14 @@ export default function AddCustomer() {
                 <ArrowLeft size={16} />
                 Back
               </button>
-            </div>
+            }
+          />
+
+          <form onSubmit={handleSubmit} className="space-y-8">
             <div className="border-b border-gray-200 mb-3"></div>
             {/* Basic Information Section */}
             <div>
-              <h2 className="text-xl font-bold text-gray-800 mb-4 pb-2 border-b-2 border-purple-200">
-                Basic Information
-              </h2>
+              <SectionHeader title="Basic Information" icon={<ClipboardList size={18} />} />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Customer Name Field */}
                 <div>
@@ -141,7 +202,7 @@ export default function AddCustomer() {
                     htmlFor="customerName"
                     className="block text-sm font-semibold text-gray-700 mb-2"
                   >
-                    Patient Name <span className="text-red-500">*</span>
+                    Owner Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -149,7 +210,7 @@ export default function AddCustomer() {
                     name="customerName"
                     value={formData.customerName}
                     onChange={handleChange}
-                    placeholder="Enter patient name"
+                    placeholder="Enter Owner name"
                     required
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
                   />
@@ -166,7 +227,7 @@ export default function AddCustomer() {
                     htmlFor="phoneNumber"
                     className="block text-sm font-semibold text-gray-700 mb-2"
                   >
-                    Phone Number
+                    Phone Number <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -175,6 +236,7 @@ export default function AddCustomer() {
                     value={formData.phoneNumber}
                     onChange={handleChange}
                     maxLength="10"
+                    required
                     placeholder="Enter phone number eg. 9234567890"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
                   />
@@ -213,15 +275,16 @@ export default function AddCustomer() {
                     htmlFor="address"
                     className="block text-sm font-semibold text-gray-700 mb-2"
                   >
-                    Address
+                    Address <span className="text-red-500">*</span>
                   </label>
                   <textarea
                     id="address"
                     name="address"
                     value={formData.address}
                     onChange={handleChange}
-                    placeholder="Enter customer address (street, city, state, postal code)"
+                    placeholder="Enter Owner address (street, city, state, postal code)"
                     rows="3"
+                    required
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition resize-none"
                   />
                   {errors.address && (
@@ -235,9 +298,7 @@ export default function AddCustomer() {
 
             {/* Pet Information Section */}
             <div>
-              <h2 className="text-xl font-bold text-gray-800 mb-4 pb-2 border-b-2 border-purple-200">
-                Pet Information
-              </h2>
+              <SectionHeader title="Pet Information" icon={<PawPrint size={18} />} />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label
@@ -264,23 +325,50 @@ export default function AddCustomer() {
 
                 <div>
                   <label
-                    htmlFor="petAge"
+                    htmlFor="petAgeYears"
                     className="block text-sm font-semibold text-gray-700 mb-2"
                   >
-                    Pet Age (years)
+                    Pet Age (Years)
                   </label>
                   <input
                     type="number"
-                    id="petAge"
-                    name="petAge"
-                    value={formData.petAge}
+                    id="petAgeYears"
+                    name="petAgeYears"
+                    value={formData.petAgeYears}
                     onChange={handleChange}
                     min="0"
-                    placeholder="Enter pet age"
+                    placeholder="Enter pet age in years"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
                   />
-                  {errors.petAge && (
-                    <p className="text-sm text-red-500 mt-1">{errors.petAge}</p>
+                  {errors.petAgeYears && (
+                    <p className="text-sm text-red-500 mt-1">
+                      {errors.petAgeYears}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="petAgeMonths"
+                    className="block text-sm font-semibold text-gray-700 mb-2"
+                  >
+                    Pet Age (Months)
+                  </label>
+                  <input
+                    type="number"
+                    id="petAgeMonths"
+                    name="petAgeMonths"
+                    value={formData.petAgeMonths}
+                    onChange={handleChange}
+                    min="0"
+                    max="11"
+                    placeholder="Enter pet age in months"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                  />
+                  {errors.petAgeMonths && (
+                    <p className="text-sm text-red-500 mt-1">
+                      {errors.petAgeMonths}
+                    </p>
                   )}
                 </div>
 
@@ -289,7 +377,7 @@ export default function AddCustomer() {
                     htmlFor="petType"
                     className="block text-sm font-semibold text-gray-700 mb-2"
                   >
-                    Pet Type
+                    Species
                   </label>
                   <Select
                     options={PET_TYPE_OPTIONS.map((type) => ({
@@ -352,48 +440,179 @@ export default function AddCustomer() {
                   </div>
                 </div>
 
-                <div>
-                  <label
-                    htmlFor="petWeight"
-                    className="block text-sm font-semibold text-gray-700 mb-2"
-                  >
-                    Weight (kg)
-                  </label>
-                  <input
-                    type="number"
-                    id="petWeight"
-                    name="petWeight"
-                    value={formData.petWeight}
-                    onChange={handleChange}
-                    min="0"
-                    step="0.1"
-                    placeholder="Enter weight"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
-                  />
-                  {errors.petWeight && (
-                    <p className="text-sm text-red-500 mt-1">
-                      {errors.petWeight}
-                    </p>
-                  )}
-                </div>
-
                 <div className="md:col-span-2">
-                  <label
-                    htmlFor="vaccinated"
-                    className="block text-sm font-semibold text-gray-700 mb-2"
-                  >
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Vaccination Status
                   </label>
-                  <input
-                    type="text"
-                    id="vaccinated"
-                    name="vaccinated"
-                    value={formData.vaccinated}
-                    onChange={handleChange}
-                    placeholder="e.g., up-to-date, due, not vaccinated"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
-                  />
+                  <div className="flex items-center gap-6 px-4 py-3 border border-gray-300 rounded-lg">
+                    {["Yes", "No"].map((option) => (
+                      <label
+                        key={option}
+                        className="inline-flex items-center gap-2 text-sm text-gray-700"
+                      >
+                        <input
+                          type="radio"
+                          name="vaccinated"
+                          value={option}
+                          checked={formData.vaccinated === option}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === "No") {
+                              setFormData((prev) => ({
+                                ...prev,
+                                vaccinated: value,
+                                vaccinationStartDate: "",
+                                vaccinationEndDate: "",
+                              }));
+                            } else {
+                              setFormData((prev) => ({
+                                ...prev,
+                                vaccinated: value,
+                              }));
+                            }
+                          }}
+                          className="h-4 w-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        {option}
+                      </label>
+                    ))}
+                  </div>
                 </div>
+
+                {formData.vaccinated === "Yes" && (
+                  <>
+                    <div>
+                      <label
+                        htmlFor="vaccinationStartDate"
+                        className="block text-sm font-semibold text-gray-700 mb-2"
+                      >
+                        Vaccination Date
+                      </label>
+                      <input
+                        type="date"
+                        id="vaccinationStartDate"
+                        name="vaccinationStartDate"
+                        value={formData.vaccinationStartDate}
+                        onChange={handleChange}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                      />
+                      {errors.vaccinationStartDate && (
+                        <p className="text-sm text-red-500 mt-1">
+                          {errors.vaccinationStartDate}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="vaccinationEndDate"
+                        className="block text-sm font-semibold text-gray-700 mb-2"
+                      >
+                        Vaccination Next Due Date
+                      </label>
+                      <input
+                        type="date"
+                        id="vaccinationEndDate"
+                        name="vaccinationEndDate"
+                        value={formData.vaccinationEndDate}
+                        onChange={handleChange}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                      />
+                      {errors.vaccinationEndDate && (
+                        <p className="text-sm text-red-500 mt-1">
+                          {errors.vaccinationEndDate}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Deworming
+                  </label>
+                  <div className="flex items-center gap-6 px-4 py-3 border border-gray-300 rounded-lg">
+                    {["Yes", "No"].map((option) => (
+                      <label
+                        key={option}
+                        className="inline-flex items-center gap-2 text-sm text-gray-700"
+                      >
+                        <input
+                          type="radio"
+                          name="deworming"
+                          value={option}
+                          checked={formData.deworming === option}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === "No") {
+                              setFormData((prev) => ({
+                                ...prev,
+                                deworming: value,
+                                dewormingStartDate: "",
+                                dewormingNextDueDate: "",
+                              }));
+                            } else {
+                              setFormData((prev) => ({
+                                ...prev,
+                                deworming: value,
+                              }));
+                            }
+                          }}
+                          className="h-4 w-4 text-purple-600 focus:ring-purple-500"
+                        />
+                        {option}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {formData.deworming === "Yes" && (
+                  <>
+                    <div>
+                      <label
+                        htmlFor="dewormingStartDate"
+                        className="block text-sm font-semibold text-gray-700 mb-2"
+                      >
+                        Deworming Start Date
+                      </label>
+                      <input
+                        type="date"
+                        id="dewormingStartDate"
+                        name="dewormingStartDate"
+                        value={formData.dewormingStartDate}
+                        onChange={handleChange}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                      />
+                      {errors.dewormingStartDate && (
+                        <p className="text-sm text-red-500 mt-1">
+                          {errors.dewormingStartDate}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="dewormingNextDueDate"
+                        className="block text-sm font-semibold text-gray-700 mb-2"
+                      >
+                        Deworming Next Due Date
+                      </label>
+                      <input
+                        type="date"
+                        id="dewormingNextDueDate"
+                        name="dewormingNextDueDate"
+                        value={formData.dewormingNextDueDate}
+                        onChange={handleChange}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                      />
+                      {errors.dewormingNextDueDate && (
+                        <p className="text-sm text-red-500 mt-1">
+                          {errors.dewormingNextDueDate}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
 
                 <div className="md:col-span-2">
                   <label
@@ -421,7 +640,10 @@ export default function AddCustomer() {
                 type="submit"
                 className="flex-1 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-semibold py-3 rounded-lg transition duration-200 shadow-md hover:shadow-lg"
               >
-                Add Patient
+                <span className="inline-flex items-center gap-2">
+                  <UserPlus size={18} />
+                  Add Patient
+                </span>
               </button>
             </div>
           </form>

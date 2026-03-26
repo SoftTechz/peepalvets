@@ -21,6 +21,18 @@ def _normalize_customer_fields(data: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _is_phone_duplicate(db, phone: str | None, exclude_customer_id: str | None = None) -> bool:
+    if not phone:
+        return False
+
+    docs = db.collection("customers").where("phone", "==", phone).stream()
+    for doc in docs:
+        if exclude_customer_id and doc.id == exclude_customer_id:
+            continue
+        return True
+    return False
+
+
 # ---------------------------
 # Create Customer
 # ---------------------------
@@ -28,18 +40,18 @@ def _normalize_customer_fields(data: dict[str, Any]) -> dict[str, Any]:
 def create_customer(payload: CustomerCreate):
     try:
         db = get_firestore()
-        doc_ref = db.collection("customers").document()
-
         now = datetime.now(timezone.utc)
-
         customer_data = _normalize_customer_fields(payload.model_dump())
         customer_data["name"] = payload.name.strip()
+        if _is_phone_duplicate(db, customer_data.get("phone")):
+            raise HTTPException(status_code=409, detail="Phone number already exists")
+
+        doc_ref = db.collection("customers").document()
 
         doc_ref.set(
             {
                 "id": doc_ref.id,
                 **customer_data,
-                "is_active": True,
                 "created_at": now,
                 "updated_at": None,
             }
@@ -51,6 +63,8 @@ def create_customer(payload: CustomerCreate):
             "id": doc_ref.id,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -73,6 +87,11 @@ def update_customer(customer_id: str, payload: CustomerUpdate):
     if "name" in update_data and update_data["name"] is None:
         raise HTTPException(status_code=422, detail="Patient name cannot be empty")
 
+    if "phone" in update_data and _is_phone_duplicate(
+        db, update_data.get("phone"), exclude_customer_id=customer_id
+    ):
+        raise HTTPException(status_code=409, detail="Phone number already exists")
+
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields provided for update")
 
@@ -84,7 +103,7 @@ def update_customer(customer_id: str, payload: CustomerUpdate):
 
 
 # ---------------------------
-# Delete Customer (Soft Delete)
+# Delete Customer
 # ---------------------------
 @router.delete("/{customer_id}")
 def delete_customer(customer_id: str):
@@ -95,33 +114,36 @@ def delete_customer(customer_id: str):
     if not doc.exists:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    doc_ref.update(
-        {
-            "is_active": False,
-            "updated_at": datetime.now(timezone.utc),
-        }
-    )
+    doc_ref.delete()
 
     return {"success": True}
 
 
 # ---------------------------
-# Get All Customers (Active Only) and sort by date descending
+# Get All Customers and sort by date descending
 # ---------------------------
 @router.get("/")
 def get_all_customers():
     db = get_firestore()
     customers_ref = db.collection("customers")
-    query = customers_ref.where("is_active", "==", True).order_by(
-        "created_at", direction="DESCENDING"
+    query = (
+        customers_ref.select(["name", "phone", "petName", "petType", "created_at"])
+        .order_by("created_at", direction="DESCENDING")
     )
     docs = query.stream()
 
     customers = []
     for doc in docs:
         customer_data = doc.to_dict() or {}
-        customer_data["id"] = doc.id
-        customers.append(customer_data)
+        customers.append(
+            {
+                "id": doc.id,
+                "name": customer_data.get("name"),
+                "phone": customer_data.get("phone"),
+                "petName": customer_data.get("petName"),
+                "petType": customer_data.get("petType"),
+            }
+        )
 
     return {"customers": customers}
 

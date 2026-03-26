@@ -1,75 +1,299 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import ModuleHeader from "@/components/ui/ModuleHeader";
+import {
+  Users,
+  Calendar,
+  Archive,
+  DollarSign,
+  ArrowUpRight,
+  Clock,
+  Triangle,
+  Sparkles,
+} from "lucide-react";
+import {
+  getDashboardStats,
+  getDashboardLowStock,
+} from "@/services/dashboard_service";
 import DashboardLayout from "../../app/layout/DashboardLayout";
-import StatCard from "../../components/ui/StatCard";
-import { getDashboardStats } from "@/services/dashboard_service";
-import erp1Image from "@/assets/erp1.jpg";
 
-export default function Dashboard() {
-  const [isLoadingStats, setIsLoadingStats] = useState(true);
-  const [stats, setStats] = useState({
-    total_invoices: 0,
-    total_customers: 0,
-    total_items: 0,
-    total_revenue: 0,
-  });
+function formatStatus(qty) {
+  if (qty < 20)
+    return {
+      label: "Critical",
+      style: "bg-red-100 text-red-700",
+      icon: Triangle,
+    };
+  if (qty < 50)
+    return {
+      label: "Low",
+      style: "bg-orange-100 text-orange-700",
+      icon: Sparkles,
+    };
+  return {
+    label: "OK",
+    style: "bg-emerald-100 text-emerald-700",
+    icon: Sparkles,
+  };
+}
+
+export default function HospitalDashboard() {
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState(null);
+  const [drugs, setDrugs] = useState([]);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchDashboardStats = async () => {
-      setIsLoadingStats(true);
-      try {
-        const res = await getDashboardStats();
-        if (res?.success && res?.data) {
-          setStats(res.data);
-        }
-      } catch (error) {
-        console.error("Failed to fetch dashboard stats:", error);
-      } finally {
-        setIsLoadingStats(false);
-      }
-    };
+    async function loadDashboard() {
+      setLoading(true);
+      setError(null);
 
-    fetchDashboardStats();
+      try {
+        const statsResponse = await getDashboardStats();
+        const lowStockResponse = await getDashboardLowStock(50, 10);
+
+        if (statsResponse?.success) {
+          const s = statsResponse.data;
+          setStats([
+            {
+              title: "Total Patients",
+              value: s.total_customers,
+              icon: Users,
+              trend: "+8% this week",
+              trendColor: "text-emerald-500",
+            },
+            {
+              title: "Total Appointments",
+              value: s.total_appointments,
+              icon: Calendar,
+              trend: "+4.5% this week",
+              trendColor: "text-emerald-500",
+            },
+            {
+              title: "Total Drugs",
+              value: s.total_drugs,
+              icon: Archive,
+              trend: "+1.2% this week",
+              trendColor: "text-emerald-500",
+            },
+            {
+              title: "Total Revenue",
+              value: `₹${s.total_revenue.toLocaleString()}`,
+              icon: DollarSign,
+              trend: "+10% this week",
+              trendColor: "text-emerald-500",
+            },
+          ]);
+        } else {
+          setStats([
+            {
+              title: "Total Patients",
+              value: 0,
+              icon: Users,
+              trend: "-",
+              trendColor: "text-slate-500",
+            },
+            {
+              title: "Total Appointments",
+              value: 0,
+              icon: Calendar,
+              trend: "-",
+              trendColor: "text-slate-500",
+            },
+            {
+              title: "Total Drugs",
+              value: 0,
+              icon: Archive,
+              trend: "-",
+              trendColor: "text-slate-500",
+            },
+            {
+              title: "Total Revenue",
+              value: "₹0",
+              icon: DollarSign,
+              trend: "-",
+              trendColor: "text-slate-500",
+            },
+          ]);
+        }
+
+        if (lowStockResponse?.success) {
+          setDrugs(lowStockResponse.data);
+        } else {
+          setDrugs([]);
+        }
+      } catch (caught) {
+        setError(caught?.message || "Failed to load dashboard");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadDashboard();
   }, []);
+
+  const cards = stats || [
+    {
+      title: "Total Patients",
+      value: "--",
+      icon: Users,
+      trend: "-",
+      trendColor: "text-slate-400",
+    },
+    {
+      title: "Total Appointments",
+      value: "--",
+      icon: Calendar,
+      trend: "-",
+      trendColor: "text-slate-400",
+    },
+    {
+      title: "Total Drugs",
+      value: "--",
+      icon: Archive,
+      trend: "-",
+      trendColor: "text-slate-400",
+    },
+    {
+      title: "Total Revenue",
+      value: "--",
+      icon: DollarSign,
+      trend: "-",
+      trendColor: "text-slate-400",
+    },
+  ];
 
   return (
     <DashboardLayout>
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8 md:mb-10">
-        <StatCard
-          title="Total Appointments"
-          // value={stats.total_invoices}
-          value={0}
-          isLoading={isLoadingStats}
+      <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6">
+        <ModuleHeader
+          icon={<Users size={22} />}
+          title="Dashboard"
+          tagline="Caring for Pets, Powered by Technology"
         />
-        <StatCard
-          title="Customers"
-          value={stats.total_customers}
-          isLoading={isLoadingStats}
-        />
-        <StatCard
-          title="Drugs"
-          // value={stats.total_items}
-          value={0}
-          isLoading={isLoadingStats}
-        />
-        <StatCard
-          title="Total Revenue"
-          // value={stats.total_revenue}
-          value={0}
-          isLoading={isLoadingStats}
-        />
-      </div>
+        <div className="max-w-[1300px] mx-auto space-y-6">
+          <section className="rounded-2xl overflow-hidden shadow-lg shadow-purple-200/60">
+            <img
+              src="peepalvetsbanner2.png"
+              alt="dashboard banner"
+              className="w-full h-48 sm:h-56 lg:h-64 object-cover"
+            />
+          </section>
 
-      {/* ERP Section */}
-      <div className="bg-white rounded-2xl shadow p-4 md:p-6 mt-6">
-        <h3 className="text-base md:text-lg font-semibold mb-4">
-          Veterinary Clinic
-        </h3>
-        <img
-          src={erp1Image}
-          alt="Veterinary Clinic"
-          className="w-full h-[360px] object-contain rounded-xl bg-white"
-        />
+          {/* Stats cards */}
+          <section>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              {(loading ? new Array(4).fill(0) : cards).map((item, idx) => (
+                <article
+                  key={item?.title ?? idx}
+                  className={`rounded-xl bg-white p-5 shadow-sm transition-transform duration-300 hover:-translate-y-1 hover:shadow-md ${
+                    loading ? "animate-pulse" : ""
+                  }`}
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-sm uppercase tracking-wide text-slate-500">
+                        {item?.title ?? "Loading"}
+                      </p>
+                      <p className="mt-2 text-3xl font-bold text-slate-900">
+                        {loading ? "--" : item.value}
+                      </p>
+                    </div>
+                    <div className="bg-slate-100 p-2 rounded-lg text-sky-500">
+                      {loading ? (
+                        <span className="block w-8 h-8 rounded-md bg-slate-300" />
+                      ) : (
+                        <item.icon className="h-6 w-6" />
+                      )}
+                    </div>
+                  </div>
+                  {!loading && item.trend && (
+                    <div className="mt-3 flex items-center gap-1 text-xs font-medium opacity-90">
+                      <ArrowUpRight className={`h-4 w-4 ${item.trendColor}`} />
+                      <span className={item.trendColor}>{item.trend}</span>
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          </section>
+
+          {/* Low stock drugs */}
+          <section className="rounded-2xl bg-white p-4 sm:p-6 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Low Stock Drugs (Qty &lt; 50)
+                </h2>
+                <p className="text-sm text-slate-500">Updated just now</p>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
+                <Clock className="h-4 w-4" /> real-time
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left">
+                <thead className="bg-slate-100 text-xs uppercase tracking-wider text-slate-600">
+                  <tr>
+                    <th className="px-4 py-3 rounded-tl-lg">Drug Name</th>
+                    <th className="px-4 py-3">Category</th>
+                    <th className="px-4 py-3">Quantity</th>
+                    <th className="px-4 py-3">Purchase Date</th>
+                    <th className="px-4 py-3 rounded-tr-lg">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {drugs.length === 0 && !loading ? (
+                    <tr className="bg-white">
+                      <td
+                        className="px-4 py-5 text-center text-slate-500"
+                        colSpan={5}
+                      >
+                        No low stock drugs found.
+                      </td>
+                    </tr>
+                  ) : (
+                    drugs.map((drug, idx) => {
+                      const qty = Number(drug.quantity ?? 0);
+                      const status = formatStatus(qty);
+                      const StatusIcon = status.icon;
+
+                      return (
+                        <tr
+                          key={drug.id || `${drug.name}-${idx}`}
+                          className={`border-b hover:bg-slate-50 transition-colors duration-150 ${idx % 2 ? "bg-white" : "bg-slate-50"}`}
+                        >
+                          <td className="px-4 py-3 font-medium text-slate-800">
+                            {drug.name}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {drug.category || "General"}
+                          </td>
+                          <td
+                            className={`px-4 py-3 font-semibold ${qty < 20 ? "text-red-600" : qty < 50 ? "text-orange-600" : "text-slate-900"}`}
+                          >
+                            {qty}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {drug.lastAddedDate}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ${status.style}`}
+                            >
+                              <StatusIcon className="mr-1 h-3.5 w-3.5" />
+                              {status.label}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       </div>
     </DashboardLayout>
   );

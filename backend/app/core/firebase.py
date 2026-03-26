@@ -65,3 +65,6 @@ def get_firestore():
 
     _db = firestore.client()
     return _db
+
+
+# ----------------------------------Firestore Production Initialization----------------------------------

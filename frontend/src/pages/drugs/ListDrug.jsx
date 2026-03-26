@@ -1,0 +1,768 @@
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import DashboardLayout from "../../app/layout/DashboardLayout";
+import {
+  Plus,
+  Eye,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  Trash2,
+  X,
+  Package,
+  Hash,
+} from "lucide-react";
+import toast from "react-hot-toast";
+import {
+  deleteDrugHistoryEntry,
+  getAllDrugs,
+  getDrugById,
+  updateDrug,
+  updateDrugName,
+} from "@/services/drug_service";
+import ModuleHeader from "@/components/ui/ModuleHeader";
+
+const formatDate = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const formatCurrency = (value) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
+
+const GST_OPTIONS = [0, 5, 12, 18, 28];
+
+export default function ListDrug() {
+  const navigate = useNavigate();
+  const today = new Date().toISOString().split("T")[0];
+
+  const [drugs, setDrugs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [drugsPerPage] = useState(10);
+  const [error, setError] = useState(null);
+
+  const [isViewOpen, setIsViewOpen] = useState(false);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [selectedDrug, setSelectedDrug] = useState(null);
+
+  const [addForm, setAddForm] = useState({
+    date: today,
+    quantity: "",
+    price: "",
+    gstPercent: "0",
+  });
+  const [editName, setEditName] = useState("");
+  const [modalLoading, setModalLoading] = useState(false);
+
+  useEffect(() => {
+    fetchDrugs();
+  }, []);
+
+  const fetchDrugs = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [drugResponse] = await Promise.all([getAllDrugs()]);
+      setDrugs(drugResponse.drugs || []);
+    } catch (err) {
+      setError("Failed to load drugs. Please try again later.");
+      console.error("Error fetching drugs:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshSelectedDrug = async (drugId) => {
+    if (!drugId) return;
+    try {
+      const response = await getDrugById(drugId);
+      setSelectedDrug(response.drug || null);
+    } catch {
+      setSelectedDrug(null);
+    }
+  };
+
+  const filteredDrugs = useMemo(
+    () =>
+      drugs.filter((drug) =>
+        drug.name.toLowerCase().includes(searchTerm.toLowerCase()),
+      ),
+    [drugs, searchTerm],
+  );
+
+  const totalPages = Math.ceil(filteredDrugs.length / drugsPerPage);
+  const startIndex = (currentPage - 1) * drugsPerPage;
+  const paginatedDrugs = filteredDrugs.slice(
+    startIndex,
+    startIndex + drugsPerPage,
+  );
+
+  const addTotalAmount = useMemo(
+    () => Number(addForm.quantity || 0) * Number(addForm.price || 0),
+    [addForm.quantity, addForm.price],
+  );
+  const addGstAmount = useMemo(
+    () => (addTotalAmount * Number(addForm.gstPercent || 0)) / 100,
+    [addTotalAmount, addForm.gstPercent],
+  );
+  const addGrandTotalAmount = useMemo(
+    () => addTotalAmount + addGstAmount,
+    [addTotalAmount, addGstAmount],
+  );
+
+  const closeAllModals = () => {
+    setIsViewOpen(false);
+    setIsAddOpen(false);
+    setIsEditOpen(false);
+    setSelectedDrug(null);
+    setAddForm({
+      date: today,
+      quantity: "",
+      price: "",
+      gstPercent: "0",
+    });
+    setEditName("");
+  };
+
+  const openViewModal = async (drugId) => {
+    await refreshSelectedDrug(drugId);
+    setIsViewOpen(true);
+  };
+
+  const openAddModal = (drug) => {
+    setSelectedDrug({
+      id: drug.id,
+      name: drug.name,
+    });
+    setAddForm({
+      date: today,
+      quantity: "",
+      price: "",
+      gstPercent: String(drug.gstPercent ?? 0),
+    });
+    setIsAddOpen(true);
+  };
+
+  const openEditModal = (drug) => {
+    setSelectedDrug({
+      id: drug.id,
+      name: drug.name,
+    });
+    setEditName(drug.name || "");
+    setIsEditOpen(true);
+  };
+
+  const handleAddEntry = async (event) => {
+    event.preventDefault();
+    if (!selectedDrug?.id) return;
+
+    if (!addForm.date) {
+      toast.error("Date is required.");
+      return;
+    }
+    if (!addForm.quantity || Number(addForm.quantity) <= 0) {
+      toast.error("Quantity must be greater than 0.");
+      return;
+    }
+    if (!addForm.price || Number(addForm.price) <= 0) {
+      toast.error("Price must be greater than 0.");
+      return;
+    }
+
+    try {
+      setModalLoading(true);
+      await updateDrug(selectedDrug.id, {
+        date: addForm.date,
+        quantity: Number(addForm.quantity),
+        price: Number(addForm.price),
+        gstPercent: Number(addForm.gstPercent || 0),
+      });
+      await fetchDrugs();
+      await refreshSelectedDrug(selectedDrug.id);
+      toast.success("Drug entry added successfully.");
+      setIsAddOpen(false);
+      setIsViewOpen(true);
+    } catch {
+      toast.error("Failed to add entry.");
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const handleRenameDrug = async (event) => {
+    event.preventDefault();
+    if (!selectedDrug?.id) return;
+
+    try {
+      setModalLoading(true);
+      await updateDrugName(selectedDrug.id, editName);
+      await fetchDrugs();
+      await refreshSelectedDrug(selectedDrug.id);
+      toast.success("Drug name updated successfully.");
+      setIsEditOpen(false);
+      setIsViewOpen(true);
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      if (detail === "Drug name already exists") {
+        toast.error("Drug name already exists.");
+      } else if (detail === "Drug name is required") {
+        toast.error("Drug name is required.");
+      } else {
+        toast.error("Failed to update drug name.");
+      }
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const handleDeleteHistory = async (entryId) => {
+    if (!selectedDrug?.id) return;
+
+    if (!window.confirm("Delete this history entry?")) {
+      return;
+    }
+
+    try {
+      setModalLoading(true);
+      await deleteDrugHistoryEntry(selectedDrug.id, entryId);
+      await fetchDrugs();
+      await refreshSelectedDrug(selectedDrug.id);
+      toast.success("History entry deleted.");
+    } catch {
+      toast.error("Failed to delete history entry.");
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage((prev) => prev + 1);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage((prev) => prev - 1);
+    }
+  };
+
+  return (
+    <DashboardLayout>
+      <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6">
+        <ModuleHeader
+          icon={<Package size={22} />}
+          title="Drug Management"
+          tagline="Manage all drug inventory records"
+          action={
+            <button
+              onClick={() => navigate("/drugs/add")}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white text-sm md:text-base font-semibold py-2 md:py-2.5 px-3 md:px-4 rounded-lg transition duration-200 shadow-md hover:shadow-lg"
+            >
+              <Plus size={18} />
+              Add Drug
+            </button>
+          }
+        />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+          <p className="inline-flex items-center gap-2 text-sm text-purple-800 font-bold uppercase tracking-wide">
+            <Package size={16} />
+            Total Drugs - {drugs.length}
+          </p>
+        </div>
+
+        <div className="mb-6 relative">
+          <Search className="absolute left-3 top-3 text-gray-400" size={20} />
+          <input
+            type="text"
+            placeholder="Search by drug name..."
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+        </div>
+
+        {error && (
+          <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+          </div>
+        ) : paginatedDrugs.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500 text-lg">No drugs found</p>
+            <p className="text-gray-400 mt-2">
+              {searchTerm
+                ? "Try adjusting your search"
+                : "Add your first drug to get started"}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                      <span className="inline-flex items-center gap-1">
+                        {/* <Hash size={14} /> */}
+                        S.No
+                      </span>
+                    </th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                      Drug Name
+                    </th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                      Last Purchase Date
+                    </th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                      Present Quantity
+                    </th>
+                    <th className="px-6 py-4 text-center text-sm font-semibold text-gray-700">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedDrugs.map((drug, index) => (
+                    <tr
+                      key={drug.id}
+                      className="border-b border-gray-200 hover:bg-gray-50 transition duration-150"
+                    >
+                      <td className="px-6 py-4 text-sm text-gray-700 font-medium">
+                        {startIndex + index + 1}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-800 font-medium">
+                        {drug.name}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {formatDate(drug.lastAddedDate)}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {drug.presentQuantity ?? 0}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => openViewModal(drug.id)}
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-blue-100 text-blue-600 hover:bg-blue-200 transition duration-150"
+                            title="View"
+                          >
+                            <Eye size={16} />
+                          </button>
+                          <button
+                            onClick={() => openAddModal(drug)}
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition duration-150"
+                            title="Add"
+                          >
+                            <Plus size={16} />
+                          </button>
+                          <button
+                            onClick={() => openEditModal(drug)}
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-purple-100 text-purple-600 hover:bg-purple-200 transition duration-150"
+                            title="Edit"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="md:hidden space-y-4">
+              {paginatedDrugs.map((drug) => (
+                <div
+                  key={drug.id}
+                  className="bg-gray-50 rounded-2xl border border-gray-200 p-5 space-y-3"
+                >
+                  <h3 className="font-semibold text-gray-800">{drug.name}</h3>
+                  <p className="text-sm text-gray-600">
+                    Last Added Date: {formatDate(drug.lastAddedDate)}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Present Quantity: {drug.presentQuantity ?? 0}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => openViewModal(drug.id)}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-blue-100 text-blue-600 hover:bg-blue-200 transition duration-150"
+                      title="View"
+                    >
+                      <Eye size={16} />
+                    </button>
+                    <button
+                      onClick={() => openAddModal(drug)}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition duration-150"
+                      title="Add"
+                    >
+                      <Plus size={16} />
+                    </button>
+                    <button
+                      onClick={() => openEditModal(drug)}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-purple-100 text-purple-600 hover:bg-purple-200 transition duration-150"
+                      title="Edit"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-6 pt-4 border-t border-gray-200">
+              <div className="text-xs md:text-sm text-gray-600">
+                Showing {startIndex + 1} to{" "}
+                {Math.min(startIndex + drugsPerPage, filteredDrugs.length)} of{" "}
+                {filteredDrugs.length} drugs
+              </div>
+
+              <div className="flex items-center gap-1 md:gap-2">
+                <button
+                  onClick={handlePrevPage}
+                  disabled={currentPage === 1}
+                  className="flex items-center gap-1 px-2 md:px-3 py-1.5 md:py-2 rounded-lg border border-gray-300 text-xs md:text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150"
+                >
+                  <ChevronLeft size={14} />
+                  Previous
+                </button>
+
+                <button
+                  onClick={handleNextPage}
+                  disabled={currentPage === totalPages}
+                  className="flex items-center gap-1 px-2 md:px-3 py-1.5 md:py-2 rounded-lg border border-gray-300 text-xs md:text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150"
+                >
+                  Next
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {(isViewOpen || isAddOpen || isEditOpen) && (
+        <div className="fixed inset-0 z-50 bg-gray-100/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-800">
+                {isViewOpen
+                  ? "Drug Details"
+                  : isAddOpen
+                    ? "Add Drug Entry"
+                    : "Edit Drug Name"}
+              </h2>
+              <button
+                onClick={closeAllModals}
+                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {isViewOpen && selectedDrug && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <p className="text-sm text-gray-500">Drug Name</p>
+                      <p className="text-lg font-semibold text-gray-800 mt-1">
+                        {selectedDrug.name}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <p className="text-sm text-gray-500">Added On</p>
+                      <p className="text-lg font-semibold text-gray-800 mt-1">
+                        {formatDate(selectedDrug.addedOn)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <p className="text-sm text-gray-500">
+                        Last Purchase Date
+                      </p>
+                      <p className="text-lg font-semibold text-gray-800 mt-1">
+                        {formatDate(selectedDrug.lastAddedDate)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <p className="text-sm text-gray-500">Present Quantity</p>
+                      <p className="text-lg font-semibold text-gray-800 mt-1">
+                        {selectedDrug.presentQuantity ?? 0}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <p className="text-sm text-gray-500">Latest Price</p>
+                      <p className="text-lg font-semibold text-gray-800 mt-1">
+                        {formatCurrency(selectedDrug.latestPrice)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <p className="text-sm text-gray-500">Total Bill</p>
+                      <p className="text-lg font-semibold text-gray-800 mt-1">
+                        {formatCurrency(selectedDrug.totalBill)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                      Drug History
+                    </h3>
+                    {selectedDrug.history?.length ? (
+                      <div className="overflow-x-auto border border-gray-200 rounded-xl">
+                        <table className="w-full">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                                Date
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                                Quantity
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                                Price
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                                GST %
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                                GST Amount
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                                Total
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                                Delete
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedDrug.history.map((entry) => (
+                              <tr
+                                key={entry.id}
+                                className="border-t border-gray-100"
+                              >
+                                <td className="px-4 py-3 text-sm text-gray-700">
+                                  {formatDate(entry.date)}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-700">
+                                  {entry.quantity}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-700">
+                                  {formatCurrency(entry.price)}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-700">
+                                  {Number(entry.gstPercent || 0)}%
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-700">
+                                  {formatCurrency(entry.gstAmount || 0)}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-700">
+                                  {formatCurrency(entry.totalBill)}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-700">
+                                  <button
+                                    onClick={() =>
+                                      handleDeleteHistory(entry.id)
+                                    }
+                                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-100 text-red-600 hover:bg-red-200"
+                                    title="Delete History"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">No history found.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {isAddOpen && selectedDrug && (
+                <form onSubmit={handleAddEntry} className="space-y-5">
+                  <p className="text-sm text-gray-600">
+                    Add stock entry for{" "}
+                    <span className="font-semibold">{selectedDrug.name}</span>
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Date
+                      </label>
+                      <input
+                        type="date"
+                        name="date"
+                        value={addForm.date}
+                        onChange={(event) =>
+                          setAddForm((prev) => ({
+                            ...prev,
+                            date: event.target.value,
+                          }))
+                        }
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Quantity
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        name="quantity"
+                        value={addForm.quantity}
+                        onChange={(event) =>
+                          setAddForm((prev) => ({
+                            ...prev,
+                            quantity: event.target.value,
+                          }))
+                        }
+                        placeholder="Enter quantity"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Price
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        step="0.01"
+                        name="price"
+                        value={addForm.price}
+                        onChange={(event) =>
+                          setAddForm((prev) => ({
+                            ...prev,
+                            price: event.target.value,
+                          }))
+                        }
+                        placeholder="Enter price"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        GST (%)
+                      </label>
+                      <select
+                        name="gstPercent"
+                        value={addForm.gstPercent}
+                        onChange={(event) =>
+                          setAddForm((prev) => ({
+                            ...prev,
+                            gstPercent: event.target.value,
+                          }))
+                        }
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition bg-white"
+                      >
+                        {GST_OPTIONS.map((option) => (
+                          <option key={option} value={String(option)}>
+                            {option}%
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        GST Amount
+                      </label>
+                      <div className="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-800 font-semibold">
+                        {formatCurrency(addGstAmount)}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Total Amount
+                      </label>
+                      <div className="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-800 font-semibold">
+                        {formatCurrency(addGrandTotalAmount)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={modalLoading}
+                      className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 disabled:opacity-50 text-white font-semibold py-2.5 px-5 rounded-lg transition duration-200 shadow-md hover:shadow-lg"
+                    >
+                      {modalLoading ? "Saving..." : "Save Entry"}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {isEditOpen && selectedDrug && (
+                <form onSubmit={handleRenameDrug} className="space-y-5">
+                  <p className="text-sm text-gray-600">
+                    Update drug name for{" "}
+                    <span className="font-semibold">{selectedDrug.name}</span>
+                  </p>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Drug Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(event) => setEditName(event.target.value)}
+                      placeholder="Enter new drug name"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={modalLoading}
+                      className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 disabled:opacity-50 text-white font-semibold py-2.5 px-5 rounded-lg transition duration-200 shadow-md hover:shadow-lg"
+                    >
+                      {modalLoading ? "Saving..." : "Update Name"}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </DashboardLayout>
+  );
+}

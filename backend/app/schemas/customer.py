@@ -10,12 +10,17 @@ class CustomerBase(BaseModel):
     phone: Optional[str] = None
     address: Optional[str] = None
     petName: Optional[str] = None
-    petAge: Optional[float] = None
+    petAgeYears: Optional[int] = None
+    petAgeMonths: Optional[int] = None
     petType: Optional[str] = None
     petBreed: Optional[str] = None
     petSex: Optional[str] = None
-    petWeight: Optional[float] = None
     vaccinated: Optional[str] = None
+    vaccinationStartDate: Optional[str] = None
+    vaccinationEndDate: Optional[str] = None
+    deworming: Optional[str] = None
+    dewormingStartDate: Optional[str] = None
+    dewormingNextDueDate: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -29,18 +34,22 @@ class CustomerUpdate(BaseModel):
     phone: Optional[str] = None
     address: Optional[str] = None
     petName: Optional[str] = None
-    petAge: Optional[float] = None
+    petAgeYears: Optional[int] = None
+    petAgeMonths: Optional[int] = None
     petType: Optional[str] = None
     petBreed: Optional[str] = None
     petSex: Optional[str] = None
-    petWeight: Optional[float] = None
     vaccinated: Optional[str] = None
+    vaccinationStartDate: Optional[str] = None
+    vaccinationEndDate: Optional[str] = None
+    deworming: Optional[str] = None
+    dewormingStartDate: Optional[str] = None
+    dewormingNextDueDate: Optional[str] = None
     notes: Optional[str] = None
 
 
 class Customer(CustomerBase):
     id: str
-    is_active: bool = True
     created_at: datetime
     updated_at: Optional[datetime] = None
 

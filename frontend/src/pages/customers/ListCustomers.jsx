@@ -1,8 +1,30 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import DashboardLayout from "../../app/layout/DashboardLayout";
-import { Plus, Eye, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Plus,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  CalendarDays,
+  History,
+  Users,
+  Hash,
+  Zap,
+  X,
+  Eye,
+  FileText,
+  Image as ImageIcon,
+  Printer,
+} from "lucide-react";
 import { getAllCustomers } from "@/services/customer_service";
+import ModuleHeader from "@/components/ui/ModuleHeader";
+import {
+  createAppointment,
+  getAllAppointments,
+} from "@/services/appointment_service";
+import toast from "react-hot-toast";
 
 export default function ListCustomers() {
   const navigate = useNavigate();
@@ -12,6 +34,14 @@ export default function ListCustomers() {
   const [currentPage, setCurrentPage] = useState(1);
   const [customersPerPage] = useState(10);
   const [error, setError] = useState(null);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [customerAppointments, setCustomerAppointments] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
 
   useEffect(() => {
     fetchCustomers();
@@ -21,11 +51,11 @@ export default function ListCustomers() {
     try {
       setLoading(true);
       setError(null);
-      const response = await getAllCustomers();
-      setCustomers(response.customers || []);
+      const [customerResponse] = await Promise.all([getAllCustomers()]);
+      setCustomers(customerResponse.customers || []);
     } catch (err) {
-      setError("Failed to load patients. Please try again later.");
-      console.error("Error fetching patients:", err);
+      setError("Failed to load customers. Please try again later.");
+      console.error("Error fetching customers:", err);
     } finally {
       setLoading(false);
     }
@@ -34,9 +64,8 @@ export default function ListCustomers() {
   // Filter customers based on search term
   const filteredCustomers = customers.filter(
     (customer) =>
-      customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (customer.email &&
-        customer.email.toLowerCase().includes(searchTerm.toLowerCase())),
+      (customer.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (customer.phone || "").toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   // Pagination logic
@@ -47,17 +76,88 @@ export default function ListCustomers() {
     startIndex + customersPerPage,
   );
 
-  const handleRowClick = (customerId) => {
+  const createInstantAppointment = async (customer) => {
+    try {
+      if (!customer?.id || !customer?.name) {
+        toast.error("Patient details are incomplete.");
+        return;
+      }
+
+      const now = new Date();
+      const payload = {
+        customerId: customer.id,
+        customerName: customer.name,
+        phone: customer.phone || "",
+        petName: customer.petName || "",
+        petAgeYears: customer.petAgeYears ?? null,
+        petAgeMonths: customer.petAgeMonths ?? null,
+        petType: customer.petType || "",
+        petSex: customer.petSex || "",
+        petBreed: customer.petBreed || "",
+        vaccinated: customer.vaccinated || "",
+        deworming: customer.deworming || "",
+        date: now.toISOString().split("T")[0],
+        time: now.toTimeString().slice(0, 5),
+      };
+
+      const response = await createAppointment(payload);
+      const appointmentId = response?.id || response?.appointment_id;
+      if (!appointmentId) {
+        toast.error("Unable to open instant appointment.");
+        return;
+      }
+
+      navigate(`/appointments/${appointmentId}`);
+    } catch (err) {
+      console.error("Error creating instant appointment:", err);
+      toast.error("Failed to create instant appointment.");
+    }
+  };
+
+  const handleRowClick = (customer) => {
+    createInstantAppointment(customer);
+  };
+
+  const handleEditClick = (customerId) => {
     navigate(`/customers/${customerId}`);
   };
 
-  const handleEyeClick = (customerId) => {
-    navigate(`/customers/${customerId}`);
+  const handleCalendarClick = (customer) => {
+    const params = new URLSearchParams({
+      customerId: customer.id || "",
+      customerName: customer.name || "",
+      phone: customer.phone || "",
+      petName: customer.petName || "",
+      petAgeYears:
+        customer.petAgeYears === null || customer.petAgeYears === undefined
+          ? ""
+          : String(customer.petAgeYears),
+      petAgeMonths:
+        customer.petAgeMonths === null || customer.petAgeMonths === undefined
+          ? ""
+          : String(customer.petAgeMonths),
+      petType: customer.petType || "",
+      petSex: customer.petSex || "",
+      petBreed: customer.petBreed || "",
+      vaccinated: customer.vaccinated || "",
+      deworming: customer.deworming || "",
+    });
+    navigate(`/appointments/add?${params.toString()}`);
   };
 
-  const handleNextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
+  const handleHistoryClick = async (customer) => {
+    setSelectedCustomer(customer);
+    setHistoryModalOpen(true);
+    setHistoryLoading(true);
+    try {
+      const response = await getAllAppointments({ customer_id: customer.id });
+      setCustomerAppointments(response.appointments || []);
+    } catch (err) {
+      console.error("Error fetching appointments:", err);
+      toast.error("Failed to load appointment history");
+      setCustomerAppointments([]);
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -67,26 +167,64 @@ export default function ListCustomers() {
     }
   };
 
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const handleViewImages = (appointment) => {
+    setSelectedImages(appointment.scannedImages || []);
+    setImageModalOpen(true);
+  };
+
+  const handleViewPrescription = (appointment) => {
+    setSelectedAppointment(appointment);
+    setPdfModalOpen(true);
+  };
+
+  const closePdfModal = () => {
+    setPdfModalOpen(false);
+    setSelectedAppointment(null);
+  };
+
+  const handlePrint = async () => {
+    if (!selectedAppointment?.id) {
+      console.error("Appointment ID not available");
+      return;
+    }
+
+    try {
+      const url = `/peepalvets.html?appointment_id=${selectedAppointment.id}&print=1&api_base=/api/v1`;
+      window.open(url, "_blank", "noopener");
+    } catch (error) {
+      console.error("Error opening prescription for printing:", error);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 md:mb-8">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
-              Patients Management
-            </h1>
-            <p className="text-sm md:text-base text-gray-500 mt-1">
-              Manage your patients
-            </p>
-          </div>
-          <button
-            onClick={() => navigate("/customers/add")}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white text-sm md:text-base font-semibold py-2 md:py-2.5 px-3 md:px-4 rounded-lg transition duration-200 shadow-md hover:shadow-lg"
-          >
-            <Plus size={18} />
-            Add Patient
-          </button>
+        <ModuleHeader
+          icon={<Users size={22} />}
+          title="Patients Management"
+          tagline="Manage your patients"
+          action={
+            <button
+              onClick={() => navigate("/customers/add")}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white text-sm md:text-base font-semibold py-2 md:py-2.5 px-3 md:px-4 rounded-lg transition duration-200 shadow-md hover:shadow-lg"
+            >
+              <Plus size={18} />
+              Add Patient
+            </button>
+          }
+        />
+
+        <div className="mb-4">
+          <p className="inline-flex items-center gap-2 text-sm text-purple-800 font-bold uppercase tracking-wide">
+            <Users size={16} />
+            Total Patients - {customers.length}
+          </p>
         </div>
 
         {/* Search Bar */}
@@ -94,7 +232,7 @@ export default function ListCustomers() {
           <Search className="absolute left-3 top-3 text-gray-400" size={20} />
           <input
             type="text"
-            placeholder="Search by patient name or email..."
+            placeholder="Search by owner name or phone number"
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
@@ -133,7 +271,13 @@ export default function ListCustomers() {
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50">
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      Customer Name
+                      <span className="inline-flex items-center gap-1">
+                        {/* <Hash size={14} /> */}
+                        S.No
+                      </span>
+                    </th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                      Owner Name
                     </th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
                       Number
@@ -142,7 +286,7 @@ export default function ListCustomers() {
                       Pet Name
                     </th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      Pet Type
+                      Species
                     </th>
                     <th className="px-6 py-4 text-center text-sm font-semibold text-gray-700">
                       Action
@@ -150,12 +294,15 @@ export default function ListCustomers() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedCustomers.map((customer) => (
+                  {paginatedCustomers.map((customer, index) => (
                     <tr
                       key={customer.id}
                       className="border-b border-gray-200 hover:bg-gray-50 cursor-pointer transition duration-150"
-                      onClick={() => handleRowClick(customer.id)}
+                      onClick={() => handleRowClick(customer)}
                     >
+                      <td className="px-6 py-4 text-sm text-gray-700 font-medium">
+                        {startIndex + index + 1}
+                      </td>
                       <td className="px-6 py-4 text-sm text-gray-800 font-medium">
                         {/* Show only 20 characters */}
                         {customer.name.length > 20
@@ -172,16 +319,48 @@ export default function ListCustomers() {
                         {customer.petType || "-"}
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEyeClick(customer.id);
-                          }}
-                          className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-purple-100 text-purple-600 hover:bg-purple-200 transition duration-150"
-                          title="View Customer"
-                        >
-                          <Eye size={18} />
-                        </button>
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditClick(customer.id);
+                            }}
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-purple-100 text-purple-600 hover:bg-purple-200 transition duration-150"
+                            title="Edit Customer"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCalendarClick(customer);
+                            }}
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition duration-150"
+                            title="Add Appointment"
+                          >
+                            <CalendarDays size={16} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              createInstantAppointment(customer);
+                            }}
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition duration-150"
+                            title="Instant Appointment"
+                          >
+                            <Zap size={16} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleHistoryClick(customer);
+                            }}
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition duration-150"
+                            title="Appointment History"
+                          >
+                            <History size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -195,7 +374,7 @@ export default function ListCustomers() {
                 <div
                   key={customer.id}
                   className="bg-gray-50 rounded-2xl border border-gray-200 p-5 space-y-2"
-                  onClick={() => handleRowClick(customer.id)}
+                  onClick={() => handleRowClick(customer)}
                 >
                   <div className="flex justify-between items-start gap-3">
                     <h3 className="font-semibold text-gray-800">
@@ -204,12 +383,12 @@ export default function ListCustomers() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleEyeClick(customer.id);
+                        handleEditClick(customer.id);
                       }}
                       className="text-purple-600 text-sm hover:underline flex items-center gap-1"
                     >
-                      <Eye size={14} />
-                      View
+                      <Pencil size={14} />
+                      Edit
                     </button>
                   </div>
                   <p className="text-sm text-gray-600">
@@ -221,6 +400,38 @@ export default function ListCustomers() {
                   <p className="text-sm text-gray-600">
                     Pet Type: {customer.petType || "-"}
                   </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCalendarClick(customer);
+                      }}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition duration-150"
+                      title="Add Appointment"
+                    >
+                      <CalendarDays size={16} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        createInstantAppointment(customer);
+                      }}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition duration-150"
+                      title="Instant Appointment"
+                    >
+                      <Zap size={16} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleHistoryClick(customer);
+                      }}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition duration-150"
+                      title="Appointment History"
+                    >
+                      <History size={16} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -233,7 +444,7 @@ export default function ListCustomers() {
                   startIndex + customersPerPage,
                   filteredCustomers.length,
                 )}{" "}
-                of {filteredCustomers.length} customers
+                of {filteredCustomers.length} patients
               </div>
 
               <div className="flex items-center gap-1 md:gap-2">
@@ -277,6 +488,224 @@ export default function ListCustomers() {
           </>
         )}
       </div>
+
+      {/* History Modal */}
+      {historyModalOpen && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-800">
+                Appointment History - {selectedCustomer?.name}
+              </h2>
+              <button
+                onClick={() => setHistoryModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 transition duration-150"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6 max-h-[70vh] overflow-y-auto">
+              {historyLoading ? (
+                <div className="flex justify-center items-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+                </div>
+              ) : customerAppointments.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-500 text-lg">No appointments found</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {customerAppointments.map((appointment, index) => (
+                    <div
+                      key={appointment.id}
+                      className="bg-gray-50 rounded-xl border border-gray-200 p-4"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">
+                            S.No
+                          </span>
+                          <p className="text-lg font-semibold text-gray-800">
+                            {index + 1}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">
+                            Owner Name
+                          </span>
+                          <p className="text-sm text-gray-800">
+                            {appointment.customerName}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">
+                            Doctor Fee
+                          </span>
+                          <p className="text-sm text-gray-800">
+                            ₹{appointment.doctorFee || 0}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">
+                            Date
+                          </span>
+                          <p className="text-sm text-gray-800">
+                            {appointment.date}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">
+                            Vaccinated
+                          </span>
+                          <p className="text-sm text-gray-800">
+                            {appointment.vaccinated || "Not specified"}
+                            {appointment.vaccinationStartDate && (
+                              <span className="block text-xs text-gray-600">
+                                Start: {appointment.vaccinationStartDate}
+                              </span>
+                            )}
+                            {appointment.vaccinationEndDate && (
+                              <span className="block text-xs text-gray-600">
+                                End: {appointment.vaccinationEndDate}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">
+                            Deworming
+                          </span>
+                          <p className="text-sm text-gray-800">
+                            {appointment.deworming || "Not specified"}
+                            {appointment.dewormingStartDate && (
+                              <span className="block text-xs text-gray-600">
+                                Start: {appointment.dewormingStartDate}
+                              </span>
+                            )}
+                            {appointment.dewormingEndDate && (
+                              <span className="block text-xs text-gray-600">
+                                End: {appointment.dewormingEndDate}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleViewImages(appointment)}
+                          disabled={
+                            !appointment.scannedImages ||
+                            appointment.scannedImages.length === 0
+                          }
+                          className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:bg-gray-100 disabled:text-gray-400 px-3 py-2 rounded-lg text-sm font-medium transition duration-150"
+                        >
+                          <ImageIcon size={16} />
+                          View Images ({appointment.scannedImages?.length || 0})
+                        </button>
+                        <button
+                          onClick={() => handleViewPrescription(appointment)}
+                          className="inline-flex items-center gap-2 bg-green-100 text-green-700 hover:bg-green-200 px-3 py-2 rounded-lg text-sm font-medium transition duration-150"
+                        >
+                          <FileText size={16} />
+                          View Prescription
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Modal */}
+      {imageModalOpen && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-800">
+                Appointment Images
+              </h2>
+              <button
+                onClick={() => setImageModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 transition duration-150"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6 max-h-[70vh] overflow-y-auto">
+              {selectedImages.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-500 text-lg">No images available</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {selectedImages.map((imageUrl, index) => (
+                    <div
+                      key={index}
+                      className="bg-gray-50 rounded-lg overflow-hidden"
+                    >
+                      <img
+                        src={imageUrl}
+                        alt={`Appointment image ${index + 1}`}
+                        className="w-full h-64 object-cover"
+                        onError={(e) => {
+                          e.target.src = "/placeholder-image.png"; // Fallback image
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Modal */}
+      {pdfModalOpen && selectedAppointment && (
+        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-800">
+                Appointment Prescription
+              </h2>
+              <button
+                onClick={closePdfModal}
+                className="text-gray-400 hover:text-gray-600 transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6">
+              <iframe
+                src={`/peepalvets.html?appointment_id=${
+                  selectedAppointment.id
+                }&api_base=/api/v1`}
+                title="Prescription Preview"
+                className="w-full h-[75vh] border rounded-lg bg-white"
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
+              <button
+                onClick={handlePrint}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition"
+              >
+                <Printer size={18} />
+                Print
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

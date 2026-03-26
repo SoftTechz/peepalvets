@@ -10,16 +10,21 @@ export default function DashboardLayout({ children }) {
   const closeSidebar = () => setIsSidebarOpen(false);
 
   return (
-    <div className="bg-gray-100 min-h-screen">
+    <div className="bg-purple-100 min-h-screen">
       <Navbar onMenuToggle={toggleSidebar} />
       <Toaster position="top-right" />
 
       <div className="flex pt-15">
         <Sidebar isOpen={isSidebarOpen} onClose={closeSidebar} />
 
-        <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-          {children}
-        </main>
+        <div className="flex-1 flex flex-col min-h-[calc(100vh-80px)]">
+          <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
+            {children}
+          </main>
+          <footer className="px-4 md:px-6 lg:px-8 py-4 text-center text-sm text-gray-500 border-t border-gray-200 bg-white">
+            All copyrights are reserved by Pavithiran.
+          </footer>
+        </div>
       </div>
     </div>
   );
