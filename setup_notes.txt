@@ -2,3 +2,4 @@ To go live
 change the get_firestore() in the backend\core\firebase.py folder
 change the firebase_live.js in frontend\src\services\firebase_storage.js
 in vercel setup the FIREBASE_ADMINSDK_JSON
+change env url to live link
