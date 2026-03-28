@@ -308,7 +308,15 @@ body {
   background: #f8fafd;
   font-size: 8pt;
   font-style: italic;
-  color: black;
+  color: #1a2340;
+  padding: 8px 10px;
+  border: 1px solid #dbe8f5;
+  border-radius: 4px;
+  min-height: 20px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  max-width: 100%;
 }
 
 /* Prescription section gets more space */
@@ -428,10 +436,70 @@ body {
        PRINT UTILITIES
     ════════════════════════ */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    width: 210mm;
+    min-height: 297mm;
+    background: #fff;
+    color: #1a2340;
+  }
+
   body {
     background: #fff;
   }
+
   .page {
+    width: 100%;
+    min-height: auto;
+    margin: 0;
+    box-shadow: none;
+    border: none;
+    padding: 0;
     page-break-after: always;
+  }
+
+  .header,
+  .patient-section,
+  .vital-section,
+  .body,
+  .footer-signature,
+  .footer-bar {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color: #1a2340;
+  }
+
+  .body {
+    padding: 5px 12px 5px 14px;
+  }
+
+  .rx-table,
+  .rx-table th,
+  .rx-table td {
+    table-layout: fixed;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .section-content,
+  .field-row {
+    word-break: break-word;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .field-row {
+    flex-wrap: wrap;
+  }
+
+  .field-label {
+    white-space: normal;
   }
 }
