@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../app/layout/DashboardLayout";
-import { ArrowLeft, ClipboardList, PawPrint, UserPlus, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  ClipboardList,
+  PawPrint,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import { createCustomer } from "../../services/customer_service";
 import toast from "react-hot-toast";
 import Select from "react-select";
@@ -22,11 +28,11 @@ export default function AddCustomer() {
     petAgeMonths: "",
     petType: "",
     petBreed: "",
-    petSex: "",
-    vaccinated: "",
+    petSex: "Male",
+    vaccinated: "No",
     vaccinationStartDate: "",
     vaccinationEndDate: "",
-    deworming: "",
+    deworming: "No",
     dewormingStartDate: "",
     dewormingNextDueDate: "",
     notes: "",
@@ -87,19 +93,16 @@ export default function AddCustomer() {
     }
 
     if (
-      !formData.petAgeYears.trim() &&
-      !formData.petAgeMonths.trim() &&
-      (formData.petName.trim() ||
-        formData.petType.trim() ||
-        formData.petBreed.trim() ||
-        formData.petSex.trim())
-    ) {
-      newErrors.petAgeYears = "Please enter pet age in years or months.";
-    }
-
-    if (formData.vaccinated === "Yes" && !formData.vaccinationStartDate) {
-      newErrors.vaccinationStartDate = "Vaccination date is required.";
-    }
+      formData.petName.trim() ||
+      formData.petType.trim() ||
+      formData.petBreed.trim() ||
+      formData.petSex.trim() ||
+      formData.petAgeYears.trim() ||
+      formData.petAgeMonths.trim()
+    )
+      if (formData.vaccinated === "Yes" && !formData.vaccinationStartDate) {
+        newErrors.vaccinationStartDate = "Vaccination date is required.";
+      }
 
     if (formData.vaccinated === "Yes" && !formData.vaccinationEndDate) {
       newErrors.vaccinationEndDate = "Vaccination next due date is required.";
@@ -132,10 +135,8 @@ export default function AddCustomer() {
         phone: formData.phoneNumber.trim(),
         address: formData.address.trim(),
         petName: formData.petName.trim(),
-        petAgeYears: formData.petAgeYears ? Number(formData.petAgeYears) : null,
-        petAgeMonths: formData.petAgeMonths
-          ? Number(formData.petAgeMonths)
-          : null,
+        petAgeYears: formData.petAgeYears ? Number(formData.petAgeYears) : 0,
+        petAgeMonths: formData.petAgeMonths ? Number(formData.petAgeMonths) : 0,
         petType: formData.petType.trim(),
         petBreed: formData.petBreed.trim(),
         petSex: formData.petSex,
@@ -194,7 +195,10 @@ export default function AddCustomer() {
             <div className="border-b border-gray-200 mb-3"></div>
             {/* Basic Information Section */}
             <div>
-              <SectionHeader title="Basic Information" icon={<ClipboardList size={18} />} />
+              <SectionHeader
+                title="Basic Information"
+                icon={<ClipboardList size={18} />}
+              />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Customer Name Field */}
                 <div>
@@ -298,7 +302,10 @@ export default function AddCustomer() {
 
             {/* Pet Information Section */}
             <div>
-              <SectionHeader title="Pet Information" icon={<PawPrint size={18} />} />
+              <SectionHeader
+                title="Pet Information"
+                icon={<PawPrint size={18} />}
+              />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label

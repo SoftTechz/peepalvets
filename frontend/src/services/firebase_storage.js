@@ -4,7 +4,7 @@ import {
   getDownloadURL,
   deleteObject,
 } from "firebase/storage";
-import { storage } from "@/config/firebase";
+import { storage } from "@/config/firebase_live";
 import toast from "react-hot-toast";
 
 /**

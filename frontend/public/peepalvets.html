@@ -27,10 +27,10 @@
             Plot No. 52, Wardha Road, Sita Nagar, Somalwada, Nagpur, Maharashtra
             – 440025
           </div>
-          <div class="clinic-doctor">
+          <!-- <div class="clinic-doctor">
             Dr. Vaibhav Devidas Wagh, B.V.Sc. &amp; A.H &nbsp;|&nbsp; Reg No:
             VCI/14339
-          </div>
+          </div> -->
           <div class="clinic-contact">
             <span><span class="icon-phone"></span> +91-9209158087</span>
             <span
@@ -86,7 +86,7 @@
         <div class="vital-grid">
           <!-- Row 1 -->
           <div class="field-row">
-            <span class="vital-field-label">Temperature(°C):</span>
+            <span class="vital-field-label">Temperature(°F):</span>
             <span class="vital-field-value" id="temperature">-</span>
           </div>
           <div class="field-row">
@@ -94,15 +94,15 @@
             <span class="vital-field-value" id="cmm">-</span>
           </div>
           <div class="field-row">
-            <span class="vital-field-label">Heart Rate(BPM):</span>
+            <span class="vital-field-label">Heart Rate:</span>
             <span class="vital-field-value" id="heart_rate">-</span>
           </div>
           <div class="field-row">
-            <span class="vital-field-label">Breathing Rate(BPM):</span>
+            <span class="vital-field-label">Breathing Rate:</span>
             <span class="vital-field-value" id="breathing_rate">-</span>
           </div>
           <div class="field-row">
-            <span class="vital-field-label">Pulse Rate(BPM):</span>
+            <span class="vital-field-label">Pulse Rate:</span>
             <span class="vital-field-value" id="pulse_rate">-</span>
           </div>
           <div class="field-row">
@@ -184,7 +184,7 @@
       <div class="footer-signature">
         <div class="sig-block">
           <div class="sig-line" id="doctor_signature">-</div>
-          <div class="sig-label">Doctor's Signature</div>
+          <div class="sig-label">Doctor's Sign & Stamp</div>
         </div>
         <div class="date-block">
           <div class="date-line" id="signature_date">-</div>
@@ -236,7 +236,11 @@
             med.name ||
             (typeof med === "string" ? med : "Unknown");
           const timing =
-            med.food === "before" ? "B/F" : med.food === "after" ? "A/F" : "-";
+            med.food === "before"
+              ? "Before Food"
+              : med.food === "after"
+                ? "After Food"
+                : "-";
           const instruction = med.specialInstruction || med.instructions || "";
 
           html += `
@@ -301,7 +305,7 @@
           final_diagnosis: appointment.finalDiagnosis || "",
           treatment: appointment.treatment || "-",
           advice: appointment.advice || "",
-          doctor_signature: "Dr. Vaibhav Devidas Wagh",
+          doctor_signature: "",
           signature_date: formatDate(appointment.date),
         };
 

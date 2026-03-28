@@ -147,7 +147,7 @@ def create_appointment(payload: AppointmentCreate):
                 "dewormingStartDate"
             ) or appointment_data.get("dewormingStartDate")
             appointment_data["dewormingEndDate"] = customer_data.get(
-                "dewormingEndDate"
+                "dewormingNextDueDate"
             ) or appointment_data.get("dewormingEndDate")
             appointment_data["vaccinationStartDate"] = customer_data.get(
                 "vaccinationStartDate"

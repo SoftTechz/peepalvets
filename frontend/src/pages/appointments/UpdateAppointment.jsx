@@ -6,12 +6,17 @@ import {
   CalendarClock,
   Camera,
   Check,
+  Edit,
   Eye,
+  FileText,
   HeartPulse,
+  History,
+  Image as ImageIcon,
   LayoutTemplate,
   Mic,
   Pill,
   Plus,
+  Printer,
   Save,
   Stethoscope,
   UserRound,
@@ -22,6 +27,7 @@ import Select from "react-select";
 import toast from "react-hot-toast";
 import Webcam from "react-webcam";
 import {
+  getAllAppointments,
   getAppointmentById,
   updateAppointment,
 } from "@/services/appointment_service";
@@ -72,6 +78,12 @@ export default function UpdateAppointment() {
   const [cameraError, setCameraError] = useState("");
   const [capturingImage, setCapturingImage] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
+  const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
+  const [completedAppointment, setCompletedAppointment] = useState(null);
+  const [editingMedicineId, setEditingMedicineId] = useState(null);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [patientHistory, setPatientHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const webcamRef = useRef(null);
 
   const [formData, setFormData] = useState({
@@ -133,6 +145,7 @@ export default function UpdateAppointment() {
   );
 
   const isVaccinated = (formData.vaccinated || "").toLowerCase() === "yes";
+  const isDewormed = (formData.deworming || "").toLowerCase() === "yes";
   const petAgeDisplay = useMemo(() => {
     const years = Number(formData.petAgeYears || 0);
     const months = Number(formData.petAgeMonths || 0);
@@ -392,6 +405,127 @@ export default function UpdateAppointment() {
       food: "",
       specialInstruction: "",
     });
+  };
+
+  const editMedicine = (medicineId) => {
+    if (isReadOnly) return;
+    const medicine = formData.medicines.find((med) => med.id === medicineId);
+    if (medicine) {
+      setMedicineForm({
+        drugName: medicine.drugName,
+        duration: medicine.duration.toString(),
+        unit: medicine.unit,
+        timing: { ...medicine.timing },
+        food: medicine.food || "",
+        specialInstruction: medicine.specialInstruction || "",
+      });
+      setEditingMedicineId(medicineId);
+    }
+  };
+
+  const updateMedicine = () => {
+    if (isReadOnly) return;
+    if (!medicineForm.drugName) {
+      toast.error("Drug name is required.");
+      return;
+    }
+    if (!medicineForm.duration || Number(medicineForm.duration) <= 0) {
+      toast.error("Duration must be greater than 0.");
+      return;
+    }
+
+    const timingValues = Object.values(medicineForm.timing).map((value) =>
+      Number(value || 0),
+    );
+    if (timingValues.every((value) => value <= 0)) {
+      toast.error("At least one value in M/A/E/N must be greater than 0.");
+      return;
+    }
+
+    const selectedDrug = drugs.find(
+      (drug) => drug.name === medicineForm.drugName,
+    );
+
+    const updatedMedicine = {
+      id: editingMedicineId,
+      drugName: medicineForm.drugName,
+      availableQuantity: selectedDrug?.presentQuantity ?? 0,
+      duration: Number(medicineForm.duration),
+      unit: medicineForm.unit,
+      timing: medicineForm.timing,
+      food: medicineForm.food,
+      specialInstruction: medicineForm.specialInstruction.trim(),
+    };
+
+    setFormData((prev) => ({
+      ...prev,
+      medicines: prev.medicines.map((med) =>
+        med.id === editingMedicineId ? updatedMedicine : med,
+      ),
+    }));
+
+    setMedicineForm({
+      drugName: "",
+      duration: "",
+      unit: "days",
+      timing: { M: "", A: "", E: "", N: "" },
+      food: "",
+      specialInstruction: "",
+    });
+    setEditingMedicineId(null);
+    toast.success("Medicine updated successfully.");
+  };
+
+  const cancelEdit = () => {
+    setMedicineForm({
+      drugName: "",
+      duration: "",
+      unit: "days",
+      timing: { M: "", A: "", E: "", N: "" },
+      food: "",
+      specialInstruction: "",
+    });
+    setEditingMedicineId(null);
+  };
+
+  const openHistoryModal = async () => {
+    if (!formData.customerId) {
+      toast.error("Customer ID not available");
+      return;
+    }
+
+    try {
+      setHistoryLoading(true);
+      setShowHistoryModal(true);
+
+      // Fetch patient history - you'll need to implement this API endpoint
+      // For now, I'll create a placeholder that fetches appointments for this customer
+      const response = await getAllAppointments({
+        customer_id: formData.customerId,
+        minimal: false,
+      });
+
+      // Filter out the current appointment and sort by date (newest first)
+      const historyAppointments = (response.appointments || [])
+        .filter((appointment) => appointment.id !== appointmentId)
+        .sort(
+          (a, b) =>
+            new Date(b.date || b.created_at) - new Date(a.date || a.created_at),
+        );
+
+      setPatientHistory(historyAppointments);
+    } catch (error) {
+      console.error("Error fetching patient history:", error);
+      toast.error("Failed to load patient history");
+      setShowHistoryModal(false);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const closeHistoryModal = () => {
+    setShowHistoryModal(false);
+    setPatientHistory([]);
   };
 
   const toggleFoodChoice = (choice) => {
@@ -658,7 +792,14 @@ export default function UpdateAppointment() {
 
       await updateAppointment(appointmentId, payload);
       toast.success("Appointment closed successfully.");
-      navigate("/appointments");
+
+      // Store completed appointment and show prescription modal
+      setCompletedAppointment({
+        id: appointmentId,
+        ...payload,
+      });
+      setShowPrescriptionModal(true);
+      setSaving(false);
     } catch (err) {
       toast.error("Failed to close appointment.");
       setSaving(false);
@@ -679,6 +820,12 @@ export default function UpdateAppointment() {
       toast.error("Failed to cancel appointment.");
       setCanceling(false);
     }
+  };
+
+  const closePrescriptionModal = () => {
+    setShowPrescriptionModal(false);
+    setCompletedAppointment(null);
+    navigate("/appointments");
   };
 
   if (loading) {
@@ -821,7 +968,7 @@ export default function UpdateAppointment() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-700"
                   />
                 </div>
-                <div>
+                {/* <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Deworming Start Date
                   </label>
@@ -830,7 +977,7 @@ export default function UpdateAppointment() {
                     name="dewormingStartDate"
                     value={formData.dewormingStartDate}
                     onChange={handleInvestigationChange}
-                    disabled={isReadOnly}
+                    disabled
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition disabled:bg-gray-100 disabled:text-gray-700"
                   />
                 </div>
@@ -843,15 +990,41 @@ export default function UpdateAppointment() {
                     name="dewormingEndDate"
                     value={formData.dewormingEndDate}
                     onChange={handleInvestigationChange}
-                    disabled={isReadOnly}
+                    disabled
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition disabled:bg-gray-100 disabled:text-gray-700"
                   />
-                </div>
+                </div> */}
+                {isDewormed ? (
+                  <>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Deworming Date
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.dewormingStartDate || "-"}
+                        disabled
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-700"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Deworming Next Due Date
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.dewormingEndDate || "-"}
+                        disabled
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-700"
+                      />
+                    </div>
+                  </>
+                ) : null}
                 {isVaccinated ? (
                   <>
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Vaccination Start Date
+                        Vaccination Date
                       </label>
                       <input
                         type="text"
@@ -912,7 +1085,7 @@ export default function UpdateAppointment() {
               <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Temperature (°C)
+                    Temperature (°F)
                   </label>
                   <input
                     type="text"
@@ -938,7 +1111,7 @@ export default function UpdateAppointment() {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Heart Rate (bpm)
+                    Heart Rate (BPM)
                   </label>
                   <input
                     type="text"
@@ -951,7 +1124,7 @@ export default function UpdateAppointment() {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Breathing Rate (bpm)
+                    Breathing Rate (BPM)
                   </label>
                   <input
                     type="text"
@@ -964,7 +1137,7 @@ export default function UpdateAppointment() {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Pulse Rate (bpm)
+                    Pulse Rate (BPM)
                   </label>
                   <input
                     type="text"
@@ -977,7 +1150,7 @@ export default function UpdateAppointment() {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Weight (kg)
+                    Weight (Kg)
                   </label>
                   <input
                     type="text"
@@ -989,6 +1162,17 @@ export default function UpdateAppointment() {
                   />
                 </div>
               </div>
+            </div>
+
+            <div className="flex justify-center mt-2">
+              <button
+                type="button"
+                onClick={() => openHistoryModal()}
+                className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-6 rounded-lg transition duration-200 shadow-md hover:shadow-lg"
+              >
+                <History size={18} />
+                Appointments History
+              </button>
             </div>
 
             <div>
@@ -1168,7 +1352,10 @@ export default function UpdateAppointment() {
             </div>
 
             <div>
-              <SectionHeading icon={<Pill size={20} />} title="Prescription" />
+              <SectionHeading
+                icon={<Pill size={20} />}
+                title={editingMedicineId ? "Edit Prescription" : "Prescription"}
+              />
 
               <div className="grid grid-cols-1 md:grid-cols-10 gap-4 mb-3">
                 <div className="md:col-span-4">
@@ -1342,16 +1529,39 @@ export default function UpdateAppointment() {
                 </div>
               </div>
 
-              <div className="flex justify-center">
-                <button
-                  type="button"
-                  onClick={addMedicine}
-                  disabled={isReadOnly}
-                  className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-5 rounded-lg transition duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
-                >
-                  <Plus size={16} />
-                  Add Medicine
-                </button>
+              <div className="flex justify-center gap-4">
+                {editingMedicineId ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={updateMedicine}
+                      disabled={isReadOnly}
+                      className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-5 rounded-lg transition duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
+                    >
+                      <Save size={16} />
+                      Update Medicine
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelEdit}
+                      disabled={isReadOnly}
+                      className="inline-flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2.5 px-5 rounded-lg transition duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
+                    >
+                      <X size={16} />
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={addMedicine}
+                    disabled={isReadOnly}
+                    className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-5 rounded-lg transition duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
+                  >
+                    <Plus size={16} />
+                    Add Medicine
+                  </button>
+                )}
               </div>
 
               <div className="mb-4 flex items-center justify-between">
@@ -1439,15 +1649,29 @@ export default function UpdateAppointment() {
                             {medicine.specialInstruction || "-"}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-700">
-                            <button
-                              type="button"
-                              onClick={() => removeMedicine(medicine.id)}
-                              disabled={isReadOnly}
-                              className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 disabled:opacity-50"
-                              title="Delete Medicine"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => editMedicine(medicine.id)}
+                                disabled={
+                                  isReadOnly ||
+                                  editingMedicineId === medicine.id
+                                }
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-100 text-blue-600 hover:bg-blue-200 disabled:opacity-50"
+                                title="Edit Medicine"
+                              >
+                                <Edit size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeMedicine(medicine.id)}
+                                disabled={isReadOnly}
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 disabled:opacity-50"
+                                title="Delete Medicine"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -1974,6 +2198,220 @@ export default function UpdateAppointment() {
           </div>
         </div>
       ) : null}
+
+      {/* Prescription Modal */}
+      {showPrescriptionModal && completedAppointment && (
+        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-800">
+                Appointment Prescription
+              </h2>
+              <button
+                onClick={closePrescriptionModal}
+                className="text-gray-400 hover:text-gray-600 transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6">
+              <iframe
+                src={`/peepalvets.html?appointment_id=${
+                  completedAppointment.id
+                }&api_base=/api/v1`}
+                title="Prescription Preview"
+                className="w-full h-[75vh] border rounded-lg bg-white"
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  const url = `/peepalvets.html?appointment_id=${completedAppointment.id}&print=1&api_base=/api/v1`;
+                  window.open(url, "_blank", "noopener");
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition"
+              >
+                <Printer size={18} />
+                Print
+              </button>
+              <button
+                onClick={closePrescriptionModal}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 transition"
+              >
+                Back to Appointments
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* History Modal */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-800">
+                Appointment History - {formData.customerName}
+              </h2>
+              <button
+                onClick={closeHistoryModal}
+                className="text-gray-400 hover:text-gray-600 transition duration-150"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6 max-h-[70vh] overflow-y-auto">
+              {historyLoading ? (
+                <div className="flex justify-center items-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+                </div>
+              ) : patientHistory.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-500 text-lg">No appointments found</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {patientHistory.map((appointment, index) => (
+                    <div
+                      key={appointment.id}
+                      className="bg-gray-50 rounded-xl border border-gray-200 p-4"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">
+                            S.No
+                          </span>
+                          <p className="text-lg font-semibold text-gray-800">
+                            {index + 1}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">
+                            Owner Name
+                          </span>
+                          <p className="text-sm text-gray-800">
+                            {appointment.customerName}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">
+                            Doctor Fee
+                          </span>
+                          <p className="text-sm text-gray-800">
+                            ₹{appointment.doctorFee || 0}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">
+                            Appointment Date
+                          </span>
+                          <p className="text-sm text-gray-800">
+                            {appointment.date}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">
+                            Pet Name
+                          </span>
+                          <p className="text-sm text-gray-800">
+                            {appointment.petName || "-"}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">
+                            Species
+                          </span>
+                          <p className="text-sm text-gray-800">
+                            {appointment.petType || "-"}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">
+                            Vaccinated
+                          </span>
+                          <p className="text-sm text-gray-800">
+                            {appointment.vaccinated || "Not specified"}
+                            {appointment.vaccinationStartDate && (
+                              <span className="block text-xs text-gray-600">
+                                Start: {appointment.vaccinationStartDate}
+                              </span>
+                            )}
+                            {appointment.vaccinationEndDate && (
+                              <span className="block text-xs text-gray-600">
+                                End: {appointment.vaccinationEndDate}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">
+                            Deworming
+                          </span>
+                          <p className="text-sm text-gray-800">
+                            {appointment.deworming || "Not specified"}
+                            {appointment.dewormingStartDate && (
+                              <span className="block text-xs text-gray-600">
+                                Start: {appointment.dewormingStartDate}
+                              </span>
+                            )}
+                            {appointment.dewormingEndDate && (
+                              <span className="block text-xs text-gray-600">
+                                End: {appointment.dewormingEndDate}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            if (
+                              appointment.scannedImages &&
+                              appointment.scannedImages.length > 0
+                            ) {
+                              // Open image modal - you might need to implement this
+                              window.open(
+                                appointment.scannedImages[0],
+                                "_blank",
+                              );
+                            }
+                          }}
+                          disabled={
+                            !appointment.scannedImages ||
+                            appointment.scannedImages.length === 0
+                          }
+                          className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:bg-gray-100 disabled:text-gray-400 px-3 py-2 rounded-lg text-sm font-medium transition duration-150"
+                        >
+                          <ImageIcon size={16} />
+                          View Images ({appointment.scannedImages?.length || 0})
+                        </button>
+                        <button
+                          onClick={() => {
+                            // Open prescription in new tab
+                            const url = `/peepalvets.html?appointment_id=${appointment.id}&api_base=/api/v1`;
+                            window.open(url, "_blank", "noopener");
+                          }}
+                          className="inline-flex items-center gap-2 bg-green-100 text-green-700 hover:bg-green-200 px-3 py-2 rounded-lg text-sm font-medium transition duration-150"
+                        >
+                          <FileText size={16} />
+                          View Prescription
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

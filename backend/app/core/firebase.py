@@ -16,6 +16,7 @@ _db = None
 # Test/local function (commented as requested).
 # Keep this for local testing with JSON file, do not use in production.
 # def get_firestore():
+
 #     global _db
 
 #     if _db:

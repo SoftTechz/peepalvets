@@ -547,14 +547,30 @@ export default function ListCustomers() {
                         </div>
                         <div>
                           <span className="text-sm font-medium text-gray-500">
-                            Date
+                            Appointment Date
                           </span>
                           <p className="text-sm text-gray-800">
                             {appointment.date}
                           </p>
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">
+                            Pet Name
+                          </span>
+                          <p className="text-sm text-gray-800">
+                            {appointment.petName || "-"}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">
+                            Species
+                          </span>
+                          <p className="text-sm text-gray-800">
+                            {appointment.petType || "-"}
+                          </p>
+                        </div>
                         <div>
                           <span className="text-sm font-medium text-gray-500">
                             Vaccinated
