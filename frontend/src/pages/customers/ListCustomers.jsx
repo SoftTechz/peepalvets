@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import DashboardLayout from "../../app/layout/DashboardLayout";
 import {
   Plus,
@@ -31,52 +31,113 @@ export default function ListCustomers() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [activeSearchTerm, setActiveSearchTerm] = useState("");
+  const [cursor, setCursor] = useState(null);
+  const [cursorHistory, setCursorHistory] = useState([]);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasNext, setHasNext] = useState(false);
+  const [totalCustomers, setTotalCustomers] = useState(0);
   const [customersPerPage] = useState(10);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const requestIdRef = useRef(0);
+
+  const hasPrev = cursorHistory.length > 0;
   const [error, setError] = useState(null);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerAppointments, setCustomerAppointments] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
 
   useEffect(() => {
-    fetchCustomers();
-  }, []);
+    const timer = setTimeout(() => {
+      const trimmed = searchTerm.trim();
+      if (trimmed.length >= 3) {
+        setActiveSearchTerm(trimmed);
+      } else if (trimmed.length === 0) {
+        setActiveSearchTerm("");
+        setCursor(null);
+        setCursorHistory([]);
+      } else {
+        // 1-2 chars: do not modify results, do not call API
+      }
+    }, 400);
 
-  const fetchCustomers = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const [customerResponse] = await Promise.all([getAllCustomers()]);
-      setCustomers(customerResponse.customers || []);
-    } catch (err) {
-      setError("Failed to load customers. Please try again later.");
-      console.error("Error fetching customers:", err);
-    } finally {
-      setLoading(false);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const activeSearch = activeSearchTerm.length >= 3;
+
+    if (!activeSearch && activeSearchTerm !== "") {
+      return;
+    }
+
+    const activeCursor = cursor || undefined;
+
+    const doFetch = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const requestId = ++requestIdRef.current;
+
+        const params = {
+          limit: customersPerPage,
+          cursor: activeCursor,
+          search: activeSearch ? activeSearchTerm : undefined,
+        };
+
+        const customerResponse = await getAllCustomers(params);
+
+        if (requestId !== requestIdRef.current) {
+          return;
+        }
+
+        setCustomers(customerResponse.customers || []);
+        setNextCursor(customerResponse.next_cursor || null);
+        setHasNext(Boolean(customerResponse.has_next));
+        setTotalCustomers(customerResponse.total ?? 0);
+      } catch (err) {
+        if (requestIdRef.current) {
+          setError("Failed to load customers. Please try again later.");
+          console.error("Error fetching customers:", err);
+        }
+      } finally {
+        if (requestIdRef.current) {
+          setLoading(false);
+          setIsInitialLoad(false);
+        }
+      }
+    };
+
+    doFetch();
+  }, [cursor, activeSearchTerm, customersPerPage]);
+
+  const handlePrevPage = () => {
+    if (cursorHistory.length > 0) {
+      const previousCursor = cursorHistory[cursorHistory.length - 1];
+      setCursorHistory((prev) => prev.slice(0, -1));
+      setCursor(previousCursor || null);
     }
   };
 
-  // Filter customers based on search term
-  const filteredCustomers = customers.filter(
-    (customer) =>
-      (customer.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (customer.phone || "").toLowerCase().includes(searchTerm.toLowerCase()),
-  );
+  const handleNextPage = () => {
+    if (hasNext && nextCursor) {
+      setCursorHistory((prev) => [...prev, cursor]);
+      setCursor(nextCursor);
+    }
+  };
 
-  // Pagination logic
-  const totalPages = Math.ceil(filteredCustomers.length / customersPerPage);
-  const startIndex = (currentPage - 1) * customersPerPage;
-  const paginatedCustomers = filteredCustomers.slice(
-    startIndex,
-    startIndex + customersPerPage,
-  );
+  const startIndex = cursorHistory.length * customersPerPage;
+  const paginatedCustomers = customers;
 
   const createInstantAppointment = async (customer) => {
+    setActionLoading(true);
     try {
       if (!customer?.id || !customer?.name) {
         toast.error("Patient details are incomplete.");
@@ -111,6 +172,8 @@ export default function ListCustomers() {
     } catch (err) {
       console.error("Error creating instant appointment:", err);
       toast.error("Failed to create instant appointment.");
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -149,6 +212,7 @@ export default function ListCustomers() {
     setSelectedCustomer(customer);
     setHistoryModalOpen(true);
     setHistoryLoading(true);
+    setActionLoading(true);
     try {
       const response = await getAllAppointments({ customer_id: customer.id });
       setCustomerAppointments(response.appointments || []);
@@ -158,18 +222,7 @@ export default function ListCustomers() {
       setCustomerAppointments([]);
     } finally {
       setHistoryLoading(false);
-    }
-  };
-
-  const handlePrevPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
-  };
-
-  const handleNextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
+      setActionLoading(false);
     }
   };
 
@@ -204,7 +257,7 @@ export default function ListCustomers() {
 
   return (
     <DashboardLayout>
-      <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6">
+      <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6 relative">
         <ModuleHeader
           icon={<Users size={22} />}
           title="Patients Management"
@@ -223,7 +276,7 @@ export default function ListCustomers() {
         <div className="mb-4">
           <p className="inline-flex items-center gap-2 text-sm text-purple-800 font-bold uppercase tracking-wide">
             <Users size={16} />
-            Total Patients - {customers.length}
+            Total Patients - {totalCustomers || customers.length}
           </p>
         </div>
 
@@ -232,11 +285,13 @@ export default function ListCustomers() {
           <Search className="absolute left-3 top-3 text-gray-400" size={20} />
           <input
             type="text"
-            placeholder="Search by owner name or phone number"
+            placeholder="Search by owner name"
             value={searchTerm}
             onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
+              const value = e.target.value;
+              setSearchTerm(value);
+              setCursor(null);
+              setCursorHistory([]);
             }}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
           />
@@ -254,7 +309,7 @@ export default function ListCustomers() {
           <div className="flex justify-center items-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
           </div>
-        ) : paginatedCustomers.length === 0 ? (
+        ) : !isInitialLoad && paginatedCustomers.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-500 text-lg">No patients found</p>
             <p className="text-gray-400 mt-2">
@@ -325,7 +380,8 @@ export default function ListCustomers() {
                               e.stopPropagation();
                               handleEditClick(customer.id);
                             }}
-                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-purple-100 text-purple-600 hover:bg-purple-200 transition duration-150"
+                            disabled={actionLoading}
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-purple-100 text-purple-600 hover:bg-purple-200 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Edit Customer"
                           >
                             <Pencil size={16} />
@@ -335,7 +391,8 @@ export default function ListCustomers() {
                               e.stopPropagation();
                               handleCalendarClick(customer);
                             }}
-                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition duration-150"
+                            disabled={actionLoading}
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Add Appointment"
                           >
                             <CalendarDays size={16} />
@@ -345,7 +402,8 @@ export default function ListCustomers() {
                               e.stopPropagation();
                               createInstantAppointment(customer);
                             }}
-                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition duration-150"
+                            disabled={actionLoading}
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Instant Appointment"
                           >
                             <Zap size={16} />
@@ -355,7 +413,8 @@ export default function ListCustomers() {
                               e.stopPropagation();
                               handleHistoryClick(customer);
                             }}
-                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition duration-150"
+                            disabled={actionLoading}
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Appointment History"
                           >
                             <History size={16} />
@@ -406,7 +465,8 @@ export default function ListCustomers() {
                         e.stopPropagation();
                         handleCalendarClick(customer);
                       }}
-                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition duration-150"
+                      disabled={actionLoading}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Add Appointment"
                     >
                       <CalendarDays size={16} />
@@ -416,7 +476,8 @@ export default function ListCustomers() {
                         e.stopPropagation();
                         createInstantAppointment(customer);
                       }}
-                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition duration-150"
+                      disabled={actionLoading}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Instant Appointment"
                     >
                       <Zap size={16} />
@@ -426,7 +487,8 @@ export default function ListCustomers() {
                         e.stopPropagation();
                         handleHistoryClick(customer);
                       }}
-                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition duration-150"
+                      disabled={actionLoading}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Appointment History"
                     >
                       <History size={16} />
@@ -439,45 +501,29 @@ export default function ListCustomers() {
             {/* Pagination */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-6 pt-4 border-t border-gray-200">
               <div className="text-xs md:text-sm text-gray-600">
-                Showing {startIndex + 1} to{" "}
-                {Math.min(
-                  startIndex + customersPerPage,
-                  filteredCustomers.length,
-                )}{" "}
-                of {filteredCustomers.length} patients
+                Showing {customers.length > 0 ? startIndex + 1 : 0} to{" "}
+                {startIndex + customers.length} of{" "}
+                {totalCustomers || customers.length} patients
               </div>
 
               <div className="flex items-center gap-1 md:gap-2">
                 <button
                   onClick={handlePrevPage}
-                  disabled={currentPage === 1}
+                  disabled={!hasPrev}
                   className="flex items-center gap-1 px-2 md:px-3 py-1.5 md:py-2 rounded-lg border border-gray-300 text-xs md:text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150"
                 >
                   <ChevronLeft size={14} />
                   Previous
                 </button>
 
-                <div className="hidden sm:flex items-center gap-1">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                    (page) => (
-                      <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        className={`w-8 h-8 md:w-10 md:h-10 text-xs md:text-sm rounded-lg font-medium transition duration-150 ${
-                          currentPage === page
-                            ? "bg-purple-600 text-white"
-                            : "border border-gray-300 text-gray-700 hover:bg-gray-50"
-                        }`}
-                      >
-                        {page}
-                      </button>
-                    ),
-                  )}
-                </div>
+                <span className="text-xs md:text-sm text-gray-600 px-2">
+                  Showing {startIndex + 1} to {startIndex + customers.length} of{" "}
+                  {totalCustomers} patients
+                </span>
 
                 <button
                   onClick={handleNextPage}
-                  disabled={currentPage === totalPages}
+                  disabled={!hasNext}
                   className="flex items-center gap-1 px-2 md:px-3 py-1.5 md:py-2 rounded-lg border border-gray-300 text-xs md:text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150"
                 >
                   Next

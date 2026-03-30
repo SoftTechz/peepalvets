@@ -18,6 +18,7 @@ import toast from "react-hot-toast";
 import Select from "react-select";
 import ModuleHeader from "@/components/ui/ModuleHeader";
 import SectionHeader from "@/components/ui/SectionHeader";
+import LoadingOverlay from "@/components/ui/LoadingOverlay";
 
 const PET_TYPE_OPTIONS = ["Dog", "Cat", "Rabbit", "Bird", "Reptile", "Other"];
 
@@ -273,7 +274,11 @@ export default function UpdateCustomer() {
   return (
     <DashboardLayout>
       <div className="w-full">
-        <div className="bg-white rounded-2xl shadow-lg p-8">
+        <div className="bg-white rounded-2xl shadow-lg p-8 relative">
+          <LoadingOverlay
+            show={loading || saving}
+            message="Saving patient details..."
+          />
           {error && (
             <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
               {error}
@@ -300,7 +305,10 @@ export default function UpdateCustomer() {
             <div className="border-b border-gray-200 mb-3"></div>
 
             <div>
-              <SectionHeader title="Basic Information" icon={<ClipboardList size={18} />} />
+              <SectionHeader
+                title="Basic Information"
+                icon={<ClipboardList size={18} />}
+              />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label
@@ -392,7 +400,10 @@ export default function UpdateCustomer() {
             </div>
 
             <div>
-              <SectionHeader title="Pet Information" icon={<PawPrint size={18} />} />
+              <SectionHeader
+                title="Pet Information"
+                icon={<PawPrint size={18} />}
+              />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label

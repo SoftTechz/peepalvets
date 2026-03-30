@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { getAllAppointments } from "@/services/appointment_service";
 import ModuleHeader from "@/components/ui/ModuleHeader";
+import LoadingOverlay from "@/components/ui/LoadingOverlay";
 
 const TABS = ["active", "completed", "cancelled"];
 
@@ -43,6 +44,7 @@ export default function ListAppointments() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [pdfAppointment, setPdfAppointment] = useState(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   useEffect(() => {
     fetchAppointments();
@@ -69,11 +71,13 @@ export default function ListAppointments() {
   const handleViewAppointment = (appointment) => {
     setPdfAppointment(appointment);
     setShowPdfModal(true);
+    setPdfLoading(true);
   };
 
   const closePdfModal = () => {
     setShowPdfModal(false);
     setPdfAppointment(null);
+    setPdfLoading(false);
   };
 
   const getDownloadDatePart = (appointment) => {
@@ -165,7 +169,8 @@ export default function ListAppointments() {
 
   return (
     <DashboardLayout>
-      <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6">
+      <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6 relative">
+        <LoadingOverlay show={loading} message="Loading appointments..." />
         <ModuleHeader
           icon={<CalendarDays size={22} />}
           title="Appointments"
@@ -349,13 +354,18 @@ export default function ListAppointments() {
               </div>
 
               {/* Modal Content */}
-              <div className="p-6">
+              <div className="relative p-6">
+                <LoadingOverlay
+                  show={pdfLoading}
+                  message="Loading prescription..."
+                />
                 <iframe
                   src={`/peepalvets.html?appointment_id=${
                     pdfAppointment.id
                   }&api_base=/api/v1`}
                   title="Prescription Preview"
                   className="w-full h-[75vh] border rounded-lg bg-white"
+                  onLoad={() => setPdfLoading(false)}
                 />
               </div>
 

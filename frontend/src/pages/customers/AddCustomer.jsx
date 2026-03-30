@@ -13,6 +13,7 @@ import toast from "react-hot-toast";
 import Select from "react-select";
 import ModuleHeader from "@/components/ui/ModuleHeader";
 import SectionHeader from "@/components/ui/SectionHeader";
+import LoadingOverlay from "@/components/ui/LoadingOverlay";
 
 const PET_TYPE_OPTIONS = ["Dog", "Cat", "Rabbit", "Bird", "Reptile", "Other"];
 
@@ -39,6 +40,7 @@ export default function AddCustomer() {
   });
 
   const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -129,6 +131,7 @@ export default function AddCustomer() {
     }
 
     try {
+      setLoading(true);
       const payload = {
         name: formData.customerName,
         email: formData.email.trim(),
@@ -168,13 +171,16 @@ export default function AddCustomer() {
       } else {
         toast.error("Failed to add patient. Please try again.");
       }
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <DashboardLayout>
       <div className="w-full">
-        <div className="bg-white rounded-2xl shadow-lg p-8">
+        <div className="bg-white rounded-2xl shadow-lg p-8 relative">
+          <LoadingOverlay show={loading} message="Creating patient..." />
           <ModuleHeader
             icon={<Users size={22} />}
             title="Add New Patient"
@@ -183,7 +189,8 @@ export default function AddCustomer() {
               <button
                 type="button"
                 onClick={() => navigate("/customers")}
-                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 shadow-md hover:shadow-lg"
+                disabled={loading}
+                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ArrowLeft size={16} />
                 Back

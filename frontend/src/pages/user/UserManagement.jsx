@@ -10,6 +10,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import ModuleHeader from "@/components/ui/ModuleHeader";
+import LoadingOverlay from "@/components/ui/LoadingOverlay";
 import { changePin } from "@/services/auth_service";
 import toast from "react-hot-toast";
 
@@ -157,7 +158,8 @@ export default function UserManagement() {
 
   return (
     <DashboardLayout>
-      <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6">
+      <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6 relative">
+        <LoadingOverlay show={loading} message="Updating PIN..." />
         <ModuleHeader
           icon={<Shield size={22} />}
           title="User Management"

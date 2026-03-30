@@ -7,11 +7,16 @@ import {
   LogOut,
   X,
   Shield,
+  FileText,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
+import { useMemo, useState } from "react";
 
 export default function Sidebar({ isOpen, onClose }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [openMenus, setOpenMenus] = useState({ report: false });
 
   const menu = [
     {
@@ -26,7 +31,14 @@ export default function Sidebar({ isOpen, onClose }) {
       icon: <CalendarDays size={18} />,
       path: "/appointments",
     },
+    { name: "Billing", icon: <FileText size={18} />, path: "/billing" },
     { name: "Drugs", icon: <Package size={18} />, path: "/drugs" },
+    {
+      name: "Report",
+      icon: <FileText size={18} />,
+      key: "report",
+      children: [{ name: "Appointments", path: "/reports/appointments" }],
+    },
     {
       name: "User Management",
       icon: <Shield size={18} />,
@@ -41,6 +53,16 @@ export default function Sidebar({ isOpen, onClose }) {
   const handleMenuClick = (path) => {
     navigate(path);
     onClose();
+  };
+
+  const isMenuActive = useMemo(
+    () => (path) =>
+      location.pathname === path || location.pathname.startsWith(`${path}/`),
+    [location.pathname],
+  );
+
+  const toggleMenu = (key) => {
+    setOpenMenus((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   return (
@@ -74,21 +96,65 @@ export default function Sidebar({ isOpen, onClose }) {
 
         <ul className="space-y-2">
           {menu.map((item) => {
-            const isActive =
-              location.pathname === item.path ||
-              location.pathname.startsWith(`${item.path}/`);
+            if (!item.children) {
+              const isActive = isMenuActive(item.path);
+              return (
+                <li
+                  key={item.name}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition duration-200 ${
+                    isActive
+                      ? "bg-purple-100 text-purple-700 font-semibold shadow-sm"
+                      : "hover:bg-slate-100 text-slate-700"
+                  }`}
+                  onClick={() => handleMenuClick(item.path)}
+                >
+                  {item.icon}
+                  <span className="text-sm lg:text-base">{item.name}</span>
+                </li>
+              );
+            }
+
+            const hasActiveChild = item.children.some((child) =>
+              isMenuActive(child.path),
+            );
+            const isOpenMenu = Boolean(openMenus[item.key]);
+
             return (
-              <li
-                key={item.name}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition duration-200 ${
-                  isActive
-                    ? "bg-purple-100 text-purple-700 font-semibold shadow-sm"
-                    : "hover:bg-slate-100 text-slate-700"
-                }`}
-                onClick={() => handleMenuClick(item.path)}
-              >
-                {item.icon}
-                <span className="text-sm lg:text-base">{item.name}</span>
+              <li key={item.name}>
+                <div
+                  className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl cursor-pointer transition duration-200 ${
+                    hasActiveChild
+                      ? "bg-purple-100 text-purple-700 font-semibold shadow-sm"
+                      : "hover:bg-slate-100 text-slate-700"
+                  }`}
+                  onClick={() => toggleMenu(item.key)}
+                >
+                  <div className="flex items-center gap-3">
+                    {item.icon}
+                    <span className="text-sm lg:text-base">{item.name}</span>
+                  </div>
+                  {isOpenMenu ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </div>
+                {isOpenMenu && (
+                  <ul className="mt-1 ml-8 space-y-1">
+                    {item.children.map((child) => {
+                      const isChildActive = isMenuActive(child.path);
+                      return (
+                        <li
+                          key={child.name}
+                          className={`px-3 py-2 rounded-lg text-sm cursor-pointer transition duration-200 ${
+                            isChildActive
+                              ? "bg-purple-100 text-purple-700 font-semibold"
+                              : "hover:bg-slate-100 text-slate-700"
+                          }`}
+                          onClick={() => handleMenuClick(child.path)}
+                        >
+                          {child.name}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </li>
             );
           })}

@@ -42,7 +42,11 @@ function renderAppointment(appointment) {
   setText("species", appointment.petType || appointment.petType || "-");
   setText("sex", appointment.petSex || appointment.petSex || "-");
   setText("age", ageStr);
-  setText("breed", appointment.petBreed || appointment.petBreed || "-");
+
+  // Breed field may be referenced by two ID conventions in different templates
+  const breedValue = appointment.petBreed || "-";
+  setText("pet_breed", breedValue);
+
   setText("cmm", appointment.cmm || "-");
   setText("heart_rate", appointment.heartRate || "-");
   setText("breathing_rate", appointment.breathingRate || "-");
@@ -115,7 +119,7 @@ if (!appointmentId) {
     //   }
     // }
 
-    renderAppointment(appointment, customer);
+    renderAppointment(appointment);
   } catch (error) {
     console.error("Error loading appointment data:", error);
     // alert("Failed to load appointment details");

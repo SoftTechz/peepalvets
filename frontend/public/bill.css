@@ -146,7 +146,7 @@ body {
     ════════════════════════ */
 .patient-section {
   padding: 6px 22px 6px;
-  border-bottom: 1px dashed #c0cce0;
+  /* border-bottom: 1px dashed #c0cce0; */
 }
 
 .patient-grid {
@@ -191,69 +191,46 @@ body {
   max-width: 100px;
 }
 
-/* ════════════════════════
-       DEMOGRAPHICS GRID
-    ════════════════════════ */
-.demographics-section {
-  padding: 6px 22px 6px;
-  border-bottom: 1px dashed #c0cce0;
-}
-
-.demographics-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px 14px;
-}
-
-.demographics-grid .full-width {
-  grid-column: 1 / -1;
-}
-
-.field-row {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-}
-
-.field-label {
-  font-size: 8pt;
-  font-weight: 600;
-  color: #3a5080;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.field-value {
+.billing-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
   font-size: 9pt;
+}
+
+.billing-table th,
+.billing-table td {
+  border: 1px solid #d3d9e8;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.billing-table th {
+  background: #f1f5fb;
   color: #1a2340;
-  border-bottom: 0.5px solid #a0b0c8;
-  flex: 1;
-  min-width: 60px;
-  padding-bottom: 1px;
-  line-height: 1.4;
+  font-weight: 700;
 }
 
-/* ════════════════════════
-       VITAL SIGNS GRID
-    ════════════════════════ */
-.vital-section {
-  padding: 6px 22px 6px;
-  border-bottom: 1px dashed #c0cce0;
+.billing-table td.text-right,
+.billing-table th.text-right {
+  text-align: right;
 }
 
-.vital-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 10px 20px;
-  width: 100%;
+.billing-table .text-center {
+  text-align: center;
 }
 
-.vital-grid .full-width {
-  grid-column: 1 / -1;
+.billing-table tfoot .total-row td {
+  font-weight: 700;
+  border-top: 2px solid #1a2340;
+  background: #fafbfc;
 }
 
-.vital-grid .field-row {
-  width: 100%;
+.section-title {
+  font-size: 16px;
+  color: #1a2340;
+  font-weight: 700;
+  margin-bottom: 8px;
 }
 
 .vital-field-label {
@@ -308,18 +285,20 @@ body {
 }
 
 .prescription-clinical-section {
-  margin-bottom: 5px;
+  /* margin-bottom: 5px; */
   position: relative;
   z-index: 1;
-  border-top: 1px dashed #c0cce0;
+  border-top: none;
   /* background: #f8fafd; */
 }
 
 .section-header {
   display: flex;
+  justify-content: center;
   align-items: center;
   gap: 8px;
   font-weight: 700;
+  font-size: 14px;
   /* margin-bottom: 5px; */
 }
 
@@ -338,7 +317,7 @@ body {
 }
 
 .section-title {
-  font-size: 8pt;
+  font-size: 16px;
   font-weight: 600;
   color: #1a2340;
   letter-spacing: 0.03em;

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import DashboardLayout from "../../app/layout/DashboardLayout";
+import LoadingOverlay from "@/components/ui/LoadingOverlay";
+import ServiceItemInput from "@/components/ui/ServiceItemInput";
 import {
   ArrowLeft,
   CalendarClock,
@@ -23,7 +25,6 @@ import {
   X,
   Trash2,
 } from "lucide-react";
-import Select from "react-select";
 import toast from "react-hot-toast";
 import Webcam from "react-webcam";
 import {
@@ -34,7 +35,7 @@ import {
 import {
   createDrugTemplate,
   deleteDrugTemplate,
-  getAllDrugs,
+  getDrugNameAndQuantity,
   getAllDrugTemplates,
   getDrugTemplateById,
 } from "@/services/drug_service";
@@ -123,6 +124,12 @@ export default function UpdateAppointment() {
     medicines: [],
   });
 
+  const [treatmentDrugFields, setTreatmentDrugFields] = useState({
+    drugName: "",
+    unit: "mg",
+    quantity: "",
+  });
+
   const [medicineForm, setMedicineForm] = useState({
     drugName: "",
     duration: "",
@@ -173,7 +180,7 @@ export default function UpdateAppointment() {
 
   const fetchDrugs = async () => {
     try {
-      const response = await getAllDrugs();
+      const response = await getDrugNameAndQuantity({ limit: 500 });
       setDrugs(response.drugs || []);
     } catch (err) {
       console.error("Failed to load drugs:", err);
@@ -486,6 +493,37 @@ export default function UpdateAppointment() {
       specialInstruction: "",
     });
     setEditingMedicineId(null);
+  };
+
+  const appendTreatmentDrug = () => {
+    if (isReadOnly) return;
+    const { drugName, unit, quantity } = treatmentDrugFields;
+
+    if (!drugName.trim()) {
+      toast.error("Please select Drug Name");
+      return;
+    }
+    if (!quantity || Number(quantity) <= 0) {
+      toast.error("Quantity must be a positive number");
+      return;
+    }
+
+    const formattedLine = `${drugName}-${quantity}${unit}`;
+    setFormData((prev) => ({
+      ...prev,
+      treatment: prev.treatment
+        ? `${prev.treatment}\n${formattedLine}`
+        : formattedLine,
+    }));
+
+    setTreatmentDrugFields({
+      drugName: "",
+      quantity: "",
+    });
+
+    // Keep entered fields for repeat clicks but allow user to clear manually
+    // (or we can choose to clear automatically): here we keep as-is.
+    toast.success("Treatment row appended");
   };
 
   const openHistoryModal = async () => {
@@ -841,7 +879,19 @@ export default function UpdateAppointment() {
   return (
     <DashboardLayout>
       <div className="w-full">
-        <div className="bg-white rounded-2xl shadow-lg p-8">
+        <div className="bg-white rounded-2xl shadow-lg p-8 relative">
+          <LoadingOverlay
+            show={
+              saving ||
+              loading ||
+              canceling ||
+              templatesLoading ||
+              historyLoading ||
+              imageUploading ||
+              templateSaving
+            }
+            message="Saving appointment data..."
+          />
           {error && (
             <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
               {error}
@@ -1319,6 +1369,77 @@ export default function UpdateAppointment() {
                   {listeningField === "treatment" && (
                     <p className="text-xs text-purple-700 mt-1">Listening...</p>
                   )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mt-3 items-end">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Drug Name
+                      </label>
+                      <ServiceItemInput
+                        value={treatmentDrugFields.drugName}
+                        onChange={(value) =>
+                          setTreatmentDrugFields((prev) => ({
+                            ...prev,
+                            drugName: value,
+                          }))
+                        }
+                        drugs={drugs}
+                        placeholder="Select drug"
+                        disabled={isReadOnly}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Unit
+                      </label>
+                      <select
+                        value={treatmentDrugFields.unit}
+                        onChange={(e) =>
+                          setTreatmentDrugFields((prev) => ({
+                            ...prev,
+                            unit: e.target.value,
+                          }))
+                        }
+                        disabled={isReadOnly}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition bg-white disabled:bg-gray-100 disabled:text-gray-700"
+                      >
+                        {["mg", "ml", "IU"].map((unit) => (
+                          <option key={unit} value={unit}>
+                            {unit}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Quantity
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={treatmentDrugFields.quantity}
+                        onChange={(e) =>
+                          setTreatmentDrugFields((prev) => ({
+                            ...prev,
+                            quantity: e.target.value,
+                          }))
+                        }
+                        disabled={isReadOnly}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition disabled:bg-gray-100 disabled:text-gray-700"
+                      />
+                    </div>
+                    <div>
+                      <button
+                        type="button"
+                        onClick={appendTreatmentDrug}
+                        disabled={isReadOnly}
+                        className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-4 rounded-lg transition duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
+                        title="Append to treatment"
+                      >
+                        <Check size={18} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <div>
@@ -1362,33 +1483,17 @@ export default function UpdateAppointment() {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Drug Name
                   </label>
-                  <Select
-                    options={drugs.map((drug) => ({
-                      label: `${drug.name} (Qty: ${drug.presentQuantity ?? 0})`,
-                      value: drug.name,
-                    }))}
-                    value={
-                      medicineForm.drugName
-                        ? {
-                            label: `${medicineForm.drugName} (Qty: ${
-                              drugs.find(
-                                (item) => item.name === medicineForm.drugName,
-                              )?.presentQuantity ?? 0
-                            })`,
-                            value: medicineForm.drugName,
-                          }
-                        : null
-                    }
-                    onChange={(selected) =>
+                  <ServiceItemInput
+                    value={medicineForm.drugName}
+                    onChange={(value) =>
                       setMedicineForm((prev) => ({
                         ...prev,
-                        drugName: selected?.value || "",
+                        drugName: value,
                       }))
                     }
+                    drugs={drugs}
                     placeholder="Select drug"
-                    isClearable
-                    isSearchable
-                    isDisabled={isReadOnly}
+                    disabled={isReadOnly}
                   />
                 </div>
 

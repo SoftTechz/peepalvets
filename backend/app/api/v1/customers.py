@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.core.firebase import get_firestore
 from app.schemas.customer import CustomerCreate, CustomerUpdate
@@ -21,7 +21,16 @@ def _normalize_customer_fields(data: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _is_phone_duplicate(db, phone: str | None, exclude_customer_id: str | None = None) -> bool:
+def normalize_name(name: str | None) -> str | None:
+    if name is None:
+        return None
+    stripped = " ".join(name.strip().split())
+    return stripped.lower()
+
+
+def _is_phone_duplicate(
+    db, phone: str | None, exclude_customer_id: str | None = None
+) -> bool:
     if not phone:
         return False
 
@@ -43,8 +52,9 @@ def create_customer(payload: CustomerCreate):
         now = datetime.now(timezone.utc)
         customer_data = _normalize_customer_fields(payload.model_dump())
         customer_data["name"] = payload.name.strip()
-        if _is_phone_duplicate(db, customer_data.get("phone")):
-            raise HTTPException(status_code=409, detail="Phone number already exists")
+        customer_data["name_lower"] = normalize_name(customer_data["name"])
+        # if _is_phone_duplicate(db, customer_data.get("phone")):
+        #     raise HTTPException(status_code=409, detail="Phone number already exists")
 
         doc_ref = db.collection("customers").document()
 
@@ -87,10 +97,13 @@ def update_customer(customer_id: str, payload: CustomerUpdate):
     if "name" in update_data and update_data["name"] is None:
         raise HTTPException(status_code=422, detail="Patient name cannot be empty")
 
-    if "phone" in update_data and _is_phone_duplicate(
-        db, update_data.get("phone"), exclude_customer_id=customer_id
-    ):
-        raise HTTPException(status_code=409, detail="Phone number already exists")
+    if "name" in update_data and update_data["name"]:
+        update_data["name_lower"] = normalize_name(update_data["name"])
+
+    # if "phone" in update_data and _is_phone_duplicate(
+    #     db, update_data.get("phone"), exclude_customer_id=customer_id
+    # ):
+    #     raise HTTPException(status_code=409, detail="Phone number already exists")
 
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields provided for update")
@@ -120,32 +133,84 @@ def delete_customer(customer_id: str):
 
 
 # ---------------------------
-# Get All Customers and sort by date descending
+# Get All Customers with pagination and optional search
 # ---------------------------
 @router.get("/")
-def get_all_customers():
+def get_all_customers(
+    limit: int = Query(10, ge=1, le=100),
+    cursor: str | None = Query(None),
+    search: str | None = Query(None, min_length=1),
+):
     db = get_firestore()
     customers_ref = db.collection("customers")
-    query = (
-        customers_ref.select(["name", "phone", "petName", "petType", "created_at"])
-        .order_by("created_at", direction="DESCENDING")
-    )
-    docs = query.stream()
 
-    customers = []
-    for doc in docs:
-        customer_data = doc.to_dict() or {}
-        customers.append(
-            {
-                "id": doc.id,
-                "name": customer_data.get("name"),
-                "phone": customer_data.get("phone"),
-                "petName": customer_data.get("petName"),
-                "petType": customer_data.get("petType"),
-            }
+    def normalize(doc):
+        data = doc.to_dict() or {}
+        return {
+            "id": doc.id,
+            "name": data.get("name"),
+            "phone": data.get("phone"),
+            "petName": data.get("petName"),
+            "petType": data.get("petType"),
+        }
+
+    # Build base query + count query
+    if search:
+        term = normalize_name(search)
+        if term is None or term == "":
+            term = ""
+
+        query = (
+            customers_ref.order_by("name_lower")
+            .start_at([term])
+            .end_at([f"{term}\uf8ff"])
         )
+        count_query = (
+            customers_ref.order_by("name_lower")
+            .start_at([term])
+            .end_at([f"{term}\uf8ff"])
+        )
+    else:
+        query = customers_ref.order_by("created_at", direction="DESCENDING")
+        count_query = customers_ref
 
-    return {"customers": customers}
+    # Apply cursor pagination
+    if cursor:
+        cursor_doc = customers_ref.document(cursor).get()
+        if cursor_doc.exists:
+            query = query.start_after(cursor_doc)
+
+    query = query.limit(limit + 1)
+
+    docs = list(query.stream())
+    has_next = len(docs) > limit
+
+    selected_docs = docs[:limit] if has_next else docs
+
+    customers = [normalize(doc) for doc in selected_docs]
+
+    next_cursor = None
+    if has_next and selected_docs:
+        next_cursor = selected_docs[-1].id
+
+    # total count aggregation
+    total = 0
+    try:
+        count_agg = count_query.count()
+        count_snapshot = count_agg.get()
+        if count_snapshot and len(count_snapshot) > 0:
+            total = int(count_snapshot[0].value)
+    except Exception:
+        # fallback in case count aggregation not available
+        total = sum(1 for _ in count_query.stream())
+
+    return {
+        "customers": customers,
+        "limit": limit,
+        "next_cursor": next_cursor,
+        "has_next": has_next,
+        "total": total,
+    }
 
 
 # ---------------------------

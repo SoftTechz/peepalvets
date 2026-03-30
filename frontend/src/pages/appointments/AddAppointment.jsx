@@ -1,11 +1,17 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import DashboardLayout from "../../app/layout/DashboardLayout";
-import { ArrowLeft, CalendarClock, CalendarDays, CalendarPlus } from "lucide-react";
+import {
+  ArrowLeft,
+  CalendarClock,
+  CalendarDays,
+  CalendarPlus,
+} from "lucide-react";
 import toast from "react-hot-toast";
 import { createAppointment } from "@/services/appointment_service";
 import ModuleHeader from "@/components/ui/ModuleHeader";
 import SectionHeader from "@/components/ui/SectionHeader";
+import LoadingOverlay from "@/components/ui/LoadingOverlay";
 
 export default function AddAppointment() {
   const navigate = useNavigate();
@@ -41,6 +47,7 @@ export default function AddAppointment() {
     time: currentTime,
   });
   const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -63,6 +70,7 @@ export default function AddAppointment() {
       return;
     }
 
+    setSubmitting(true);
     try {
       const payload = {
         customerId: formData.customerId,
@@ -86,13 +94,16 @@ export default function AddAppointment() {
       navigate("/appointments");
     } catch {
       toast.error("Failed to add appointment.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
     <DashboardLayout>
       <div className="w-full">
-        <div className="bg-white rounded-2xl shadow-lg p-8">
+        <div className="bg-white rounded-2xl shadow-lg p-8 relative">
+          <LoadingOverlay show={submitting} message="Creating appointment..." />
           <ModuleHeader
             icon={<CalendarDays size={22} />}
             title="Add Appointment"
@@ -113,7 +124,10 @@ export default function AddAppointment() {
             <div className="border-b border-gray-200 mb-3"></div>
 
             <div>
-              <SectionHeader title="Appointment Information" icon={<CalendarClock size={18} />} />
+              <SectionHeader
+                title="Appointment Information"
+                icon={<CalendarClock size={18} />}
+              />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -126,7 +140,9 @@ export default function AddAppointment() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-700"
                   />
                   {errors.customerId && (
-                    <p className="text-sm text-red-500 mt-1">{errors.customerId}</p>
+                    <p className="text-sm text-red-500 mt-1">
+                      {errors.customerId}
+                    </p>
                   )}
                 </div>
 
@@ -186,7 +202,8 @@ export default function AddAppointment() {
 
               {!formData.customerId && (
                 <p className="text-sm text-amber-600 mt-4">
-                  Please open this page from the Patients list to select a patient.
+                  Please open this page from the Patients list to select a
+                  patient.
                 </p>
               )}
             </div>
@@ -194,12 +211,12 @@ export default function AddAppointment() {
             <div className="flex gap-4 pt-6 border-t border-gray-200">
               <button
                 type="submit"
-                disabled={!formData.customerId}
-                className="flex-1 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-semibold py-3 rounded-lg transition duration-200 shadow-md hover:shadow-lg"
+                disabled={!formData.customerId || submitting}
+                className="flex-1 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-semibold py-3 rounded-lg transition duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="inline-flex items-center gap-2">
                   <CalendarPlus size={18} />
-                  Add Appointment
+                  {submitting ? "Creating..." : "Add Appointment"}
                 </span>
               </button>
             </div>

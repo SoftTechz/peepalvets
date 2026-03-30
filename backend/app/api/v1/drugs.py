@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.core.firebase import get_firestore
 from app.schemas.drug import (
@@ -20,6 +20,13 @@ def _normalize_number(value: Any) -> float:
         return float(value or 0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def normalize_name(name: str | None) -> str | None:
+    if name is None:
+        return None
+    cleaned = " ".join(name.strip().split())
+    return cleaned.lower()
 
 
 def _build_history_entry(
@@ -47,7 +54,9 @@ def _build_history_entry(
 
 def _recalculate_drug_fields(drug_data: dict[str, Any]) -> dict[str, Any]:
     history = drug_data.get("history") or []
-    present_quantity = sum(_normalize_number(entry.get("quantity")) for entry in history)
+    present_quantity = sum(
+        _normalize_number(entry.get("quantity")) for entry in history
+    )
     total_bill = sum(_normalize_number(entry.get("totalBill")) for entry in history)
 
     latest_entry = history[0] if history else None
@@ -57,9 +66,13 @@ def _recalculate_drug_fields(drug_data: dict[str, Any]) -> dict[str, Any]:
         **drug_data,
         "presentQuantity": present_quantity,
         "totalBill": total_bill,
-        "latestPrice": _normalize_number(latest_entry.get("price")) if latest_entry else 0,
+        "latestPrice": (
+            _normalize_number(latest_entry.get("price")) if latest_entry else 0
+        ),
         "lastAddedDate": latest_entry.get("date") if latest_entry else None,
-        "addedOn": oldest_entry.get("date") if oldest_entry else drug_data.get("addedOn"),
+        "addedOn": (
+            oldest_entry.get("date") if oldest_entry else drug_data.get("addedOn")
+        ),
     }
 
 
@@ -87,6 +100,7 @@ def create_drug(payload: DrugCreate):
             {
                 "id": doc_ref.id,
                 "name": name,
+                "name_lower": normalize_name(name),
                 "addedOn": payload.date,
                 "lastAddedDate": payload.date,
                 "presentQuantity": entry["quantity"],
@@ -106,20 +120,94 @@ def create_drug(payload: DrugCreate):
 
 
 @router.get("/")
-def get_all_drugs():
+def get_all_drugs(
+    limit: int = Query(10, ge=1, le=100),
+    cursor: str | None = Query(None),
+    search: str | None = Query(None),
+):
     db = get_firestore()
-    docs = (
-        db.collection("drugs")
-        .select(["name", "lastAddedDate", "presentQuantity", "created_at"])
-        .order_by("created_at", direction="DESCENDING")
-        .stream()
-    )
+    drugs_ref = db.collection("drugs")
+
+    term = normalize_name(search) if search else None
+
+    if term:
+        query = (
+            drugs_ref.order_by("name_lower").start_at([term]).end_at([f"{term}\uf8ff"])
+        )
+        count_query = (
+            drugs_ref.order_by("name_lower").start_at([term]).end_at([f"{term}\uf8ff"])
+        )
+    else:
+        query = drugs_ref.order_by("created_at", direction="DESCENDING")
+        count_query = drugs_ref
+
+    if cursor:
+        cursor_doc = drugs_ref.document(cursor).get()
+        if cursor_doc.exists:
+            query = query.start_after(cursor_doc)
+
+    query = query.limit(limit + 1)
+
+    docs = list(query.stream())
+    has_next = len(docs) > limit
+    selected_docs = docs[:limit] if has_next else docs
+
+    drugs = []
+    for doc in selected_docs:
+        drug_data = doc.to_dict() or {}
+        drug_data["id"] = doc.id
+        drugs.append(drug_data)
+
+    next_cursor = selected_docs[-1].id if has_next and selected_docs else None
+
+    total = 0
+    try:
+        count_agg = count_query.count()
+        count_snapshot = count_agg.get()
+        if count_snapshot and len(count_snapshot) > 0:
+            total = int(count_snapshot[0].value)
+    except Exception:
+        total = sum(1 for _ in count_query.stream())
+
+    return {
+        "drugs": drugs,
+        "limit": limit,
+        "next_cursor": next_cursor,
+        "has_next": has_next,
+        "total": total,
+    }
+
+
+@router.get("/name-quantity")
+def get_drug_name_and_quantity(
+    search: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+):
+    db = get_firestore()
+    drugs_ref = db.collection("drugs")
+
+    term = normalize_name(search) if search else None
+
+    if term:
+        query = (
+            drugs_ref.order_by("name_lower").start_at([term]).end_at([f"{term}\uf8ff"])
+        )
+    else:
+        query = drugs_ref.order_by("created_at", direction="DESCENDING")
+
+    query = query.limit(limit)
+    docs = list(query.stream())
 
     drugs = []
     for doc in docs:
         drug_data = doc.to_dict() or {}
-        drug_data["id"] = doc.id
-        drugs.append(drug_data)
+        drugs.append(
+            {
+                "id": doc.id,
+                "name": drug_data.get("name", ""),
+                "presentQuantity": drug_data.get("presentQuantity", 0),
+            }
+        )
 
     return {"drugs": drugs}
 
@@ -155,7 +243,13 @@ def update_drug_name(drug_id: str, payload: DrugNameUpdate):
     if any(match.id != drug_id for match in existing):
         raise HTTPException(status_code=400, detail="Drug name already exists")
 
-    doc_ref.update({"name": name, "updated_at": datetime.now(timezone.utc)})
+    doc_ref.update(
+        {
+            "name": name,
+            "name_lower": normalize_name(name),
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
     return {"success": True}
 
 
@@ -251,7 +345,9 @@ def create_drug_template(payload: DrugTemplateCreate):
         if not name:
             raise HTTPException(status_code=422, detail="Template name is required")
 
-        existing = list(templates_ref.where("templateName", "==", name).limit(1).stream())
+        existing = list(
+            templates_ref.where("templateName", "==", name).limit(1).stream()
+        )
         if existing:
             raise HTTPException(status_code=400, detail="Template name already exists")
 

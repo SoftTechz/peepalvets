@@ -6,9 +6,21 @@ export const createDrug = async (payload) => {
   return res.data;
 };
 
-// Get all drugs
-export const getAllDrugs = async () => {
-  const res = await api.get("/drugs");
+// Get all drugs with pagination and search
+export const getAllDrugs = async (params = {}) => {
+  const res = await api.get("/drugs", { params });
+  return res.data;
+};
+
+// Get all drugs with pagination and search
+export const getAllDrugsNameAndQty = async (params = {}) => {
+  const res = await api.get("/drugs", { params });
+  return res.data;
+};
+
+// Get drug names and quantities for lightweight selection
+export const getDrugNameAndQuantity = async (params = {}) => {
+  const res = await api.get("/drugs/name-quantity", { params });
   return res.data;
 };
 

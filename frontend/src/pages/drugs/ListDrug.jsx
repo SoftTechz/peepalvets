@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../app/layout/DashboardLayout";
 import {
@@ -50,9 +50,17 @@ export default function ListDrug() {
   const [drugs, setDrugs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [activeSearchTerm, setActiveSearchTerm] = useState("");
+  const [cursor, setCursor] = useState(null);
+  const [cursorHistory, setCursorHistory] = useState([]);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasNext, setHasNext] = useState(false);
+  const [totalDrugs, setTotalDrugs] = useState(0);
   const [drugsPerPage] = useState(10);
   const [error, setError] = useState(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const requestIdRef = useRef(0);
+  const hasPrev = cursorHistory.length > 0;
 
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -69,15 +77,48 @@ export default function ListDrug() {
   const [modalLoading, setModalLoading] = useState(false);
 
   useEffect(() => {
-    fetchDrugs();
-  }, []);
+    const timer = setTimeout(() => {
+      const trimmed = searchTerm.trim();
+      if (trimmed.length >= 3) {
+        setActiveSearchTerm(trimmed);
+        setCursor(null);
+        setCursorHistory([]);
+      } else if (trimmed.length === 0) {
+        setActiveSearchTerm("");
+        setCursor(null);
+        setCursorHistory([]);
+      } else {
+        // 1-2 chars: do not trigger API and keep current list
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const fetchDrugs = async () => {
     try {
       setLoading(true);
       setError(null);
-      const [drugResponse] = await Promise.all([getAllDrugs()]);
+
+      const activeSearch = activeSearchTerm.length >= 3;
+      const params = {
+        limit: drugsPerPage,
+        cursor: cursor || undefined,
+        search: activeSearch ? activeSearchTerm : undefined,
+      };
+
+      const requestId = ++requestIdRef.current;
+      const drugResponse = await getAllDrugs(params);
+
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+
       setDrugs(drugResponse.drugs || []);
+      setNextCursor(drugResponse.next_cursor || null);
+      setHasNext(Boolean(drugResponse.has_next));
+      setTotalDrugs(drugResponse.total ?? 0);
+      setIsInitialLoad(false);
     } catch (err) {
       setError("Failed to load drugs. Please try again later.");
       console.error("Error fetching drugs:", err);
@@ -85,6 +126,16 @@ export default function ListDrug() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const activeSearch = activeSearchTerm.length >= 3;
+    const shouldFetchAll = activeSearchTerm === "";
+
+    if (!activeSearch && !shouldFetchAll) {
+      return;
+    }
+    fetchDrugs();
+  }, [cursor, activeSearchTerm]);
 
   const refreshSelectedDrug = async (drugId) => {
     if (!drugId) return;
@@ -96,20 +147,9 @@ export default function ListDrug() {
     }
   };
 
-  const filteredDrugs = useMemo(
-    () =>
-      drugs.filter((drug) =>
-        drug.name.toLowerCase().includes(searchTerm.toLowerCase()),
-      ),
-    [drugs, searchTerm],
-  );
-
-  const totalPages = Math.ceil(filteredDrugs.length / drugsPerPage);
-  const startIndex = (currentPage - 1) * drugsPerPage;
-  const paginatedDrugs = filteredDrugs.slice(
-    startIndex,
-    startIndex + drugsPerPage,
-  );
+  const startIndex = cursorHistory.length * drugsPerPage;
+  const paginatedDrugs = drugs;
+  const displayedTotal = totalDrugs || drugs.length;
 
   const addTotalAmount = useMemo(
     () => Number(addForm.quantity || 0) * Number(addForm.price || 0),
@@ -250,14 +290,17 @@ export default function ListDrug() {
   };
 
   const handleNextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage((prev) => prev + 1);
+    if (hasNext && nextCursor) {
+      setCursorHistory((prev) => [...prev, cursor]);
+      setCursor(nextCursor);
     }
   };
 
   const handlePrevPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage((prev) => prev - 1);
+    if (cursorHistory.length > 0) {
+      const previousCursor = cursorHistory[cursorHistory.length - 1];
+      setCursorHistory((prev) => prev.slice(0, -1));
+      setCursor(previousCursor || null);
     }
   };
 
@@ -282,7 +325,7 @@ export default function ListDrug() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
           <p className="inline-flex items-center gap-2 text-sm text-purple-800 font-bold uppercase tracking-wide">
             <Package size={16} />
-            Total Drugs - {drugs.length}
+            Total Drugs - {totalDrugs || drugs.length}
           </p>
         </div>
 
@@ -293,8 +336,17 @@ export default function ListDrug() {
             placeholder="Search by drug name..."
             value={searchTerm}
             onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
+              const value = e.target.value;
+              setSearchTerm(value);
+              const trimmed = value.trim();
+
+              if (trimmed.length === 0) {
+                setCursor(null);
+                setCursorHistory([]);
+              } else if (trimmed.length >= 3) {
+                setCursor(null);
+                setCursorHistory([]);
+              }
             }}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
           />
@@ -310,7 +362,7 @@ export default function ListDrug() {
           <div className="flex justify-center items-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
           </div>
-        ) : paginatedDrugs.length === 0 ? (
+        ) : !isInitialLoad && paginatedDrugs.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-500 text-lg">No drugs found</p>
             <p className="text-gray-400 mt-2">
@@ -436,15 +488,14 @@ export default function ListDrug() {
 
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-6 pt-4 border-t border-gray-200">
               <div className="text-xs md:text-sm text-gray-600">
-                Showing {startIndex + 1} to{" "}
-                {Math.min(startIndex + drugsPerPage, filteredDrugs.length)} of{" "}
-                {filteredDrugs.length} drugs
+                Showing {drugs.length > 0 ? startIndex + 1 : 0} to{" "}
+                {startIndex + drugs.length} of {displayedTotal} drugs
               </div>
 
               <div className="flex items-center gap-1 md:gap-2">
                 <button
                   onClick={handlePrevPage}
-                  disabled={currentPage === 1}
+                  disabled={!hasPrev}
                   className="flex items-center gap-1 px-2 md:px-3 py-1.5 md:py-2 rounded-lg border border-gray-300 text-xs md:text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150"
                 >
                   <ChevronLeft size={14} />
@@ -453,7 +504,7 @@ export default function ListDrug() {
 
                 <button
                   onClick={handleNextPage}
-                  disabled={currentPage === totalPages}
+                  disabled={!hasNext}
                   className="flex items-center gap-1 px-2 md:px-3 py-1.5 md:py-2 rounded-lg border border-gray-300 text-xs md:text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150"
                 >
                   Next

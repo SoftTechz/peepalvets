@@ -20,9 +20,9 @@ export const deleteCustomer = async (customerId) => {
   return res.data;
 };
 
-// Get all customers
-export const getAllCustomers = async () => {
-  const res = await api.get("/customers");
+// Get all customers with pagination and optional server-side search
+export const getAllCustomers = async (params = {}) => {
+  const res = await api.get("/customers", { params });
   return res.data;
 };
 

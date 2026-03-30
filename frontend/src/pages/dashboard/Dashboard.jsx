@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import ModuleHeader from "@/components/ui/ModuleHeader";
+import LoadingOverlay from "@/components/ui/LoadingOverlay";
 import {
   Users,
   Calendar,
@@ -37,20 +38,20 @@ function formatStatus(qty) {
 }
 
 export default function HospitalDashboard() {
-  const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [lowStockLoading, setLowStockLoading] = useState(true);
   const [stats, setStats] = useState(null);
   const [drugs, setDrugs] = useState([]);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     async function loadDashboard() {
-      setLoading(true);
+      setStatsLoading(true);
+      setLowStockLoading(true);
       setError(null);
 
       try {
         const statsResponse = await getDashboardStats();
-        const lowStockResponse = await getDashboardLowStock(50, 10);
-
         if (statsResponse?.success) {
           const s = statsResponse.data;
           setStats([
@@ -115,16 +116,25 @@ export default function HospitalDashboard() {
             },
           ]);
         }
+      } catch (caught) {
+        setError(caught?.message || "Failed to load dashboard stats");
+      } finally {
+        setStatsLoading(false);
+      }
 
+      try {
+        const lowStockResponse = await getDashboardLowStock(50, 10);
         if (lowStockResponse?.success) {
           setDrugs(lowStockResponse.data);
         } else {
           setDrugs([]);
         }
       } catch (caught) {
-        setError(caught?.message || "Failed to load dashboard");
+        setError(
+          (prev) => prev || caught?.message || "Failed to load low stock drugs",
+        );
       } finally {
-        setLoading(false);
+        setLowStockLoading(false);
       }
     }
 
@@ -164,11 +174,11 @@ export default function HospitalDashboard() {
 
   return (
     <DashboardLayout>
-      <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6">
+      <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6 relative">
         <ModuleHeader
           icon={<Users size={22} />}
           title="Dashboard"
-          tagline="Caring for Pets, Powered by Technology"
+          tagline="Rooted in Compassion, Driven by Science"
         />
         <div className="max-w-[1300px] mx-auto space-y-6">
           <section className="rounded-2xl overflow-hidden shadow-lg shadow-purple-200/60">
@@ -182,38 +192,42 @@ export default function HospitalDashboard() {
           {/* Stats cards */}
           <section>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              {(loading ? new Array(4).fill(0) : cards).map((item, idx) => (
-                <article
-                  key={item?.title ?? idx}
-                  className={`rounded-xl bg-white p-5 shadow-sm transition-transform duration-300 hover:-translate-y-1 hover:shadow-md ${
-                    loading ? "animate-pulse" : ""
-                  }`}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-sm uppercase tracking-wide text-slate-500">
-                        {item?.title ?? "Loading"}
-                      </p>
-                      <p className="mt-2 text-3xl font-bold text-slate-900">
-                        {loading ? "--" : item.value}
-                      </p>
+              {(statsLoading ? new Array(4).fill(0) : cards).map(
+                (item, idx) => (
+                  <article
+                    key={item?.title ?? idx}
+                    className={`rounded-xl bg-white p-5 shadow-sm transition-transform duration-300 hover:-translate-y-1 hover:shadow-md ${
+                      statsLoading ? "animate-pulse" : ""
+                    }`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-sm uppercase tracking-wide text-slate-500">
+                          {item?.title ?? "Loading"}
+                        </p>
+                        <p className="mt-2 text-3xl font-bold text-slate-900">
+                          {statsLoading ? "--" : item.value}
+                        </p>
+                      </div>
+                      <div className="bg-slate-100 p-2 rounded-lg text-sky-500">
+                        {statsLoading ? (
+                          <span className="block w-8 h-8 rounded-md bg-slate-300" />
+                        ) : (
+                          <item.icon className="h-6 w-6" />
+                        )}
+                      </div>
                     </div>
-                    <div className="bg-slate-100 p-2 rounded-lg text-sky-500">
-                      {loading ? (
-                        <span className="block w-8 h-8 rounded-md bg-slate-300" />
-                      ) : (
-                        <item.icon className="h-6 w-6" />
-                      )}
-                    </div>
-                  </div>
-                  {!loading && item.trend && (
-                    <div className="mt-3 flex items-center gap-1 text-xs font-medium opacity-90">
-                      <ArrowUpRight className={`h-4 w-4 ${item.trendColor}`} />
-                      <span className={item.trendColor}>{item.trend}</span>
-                    </div>
-                  )}
-                </article>
-              ))}
+                    {!statsLoading && item.trend && (
+                      <div className="mt-3 flex items-center gap-1 text-xs font-medium opacity-90">
+                        <ArrowUpRight
+                          className={`h-4 w-4 ${item.trendColor}`}
+                        />
+                        <span className={item.trendColor}>{item.trend}</span>
+                      </div>
+                    )}
+                  </article>
+                ),
+              )}
             </div>
           </section>
 
@@ -243,7 +257,15 @@ export default function HospitalDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {drugs.length === 0 && !loading ? (
+                  {lowStockLoading ? (
+                    <tr>
+                      <td colSpan={5}>
+                        <div className="flex justify-center items-center py-12">
+                          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : drugs.length === 0 ? (
                     <tr className="bg-white">
                       <td
                         className="px-4 py-5 text-center text-slate-500"
