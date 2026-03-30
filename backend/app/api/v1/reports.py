@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import io
 from datetime import UTC, date, datetime
-from html import escape
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
-from weasyprint import HTML
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.core.firebase import get_firestore
 
@@ -243,83 +245,69 @@ def export_appointments_report_pdf(
     date_range = _date_range_label(parsed_from, parsed_to)
     generated_on = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
 
-    table_header_html = "".join(
-        f"<th>{escape(column_title)}</th>" for column_title, _ in REPORT_COLUMNS
+    output = io.BytesIO()
+    doc = SimpleDocTemplate(
+        output,
+        pagesize=landscape(A4),
+        rightMargin=24,
+        leftMargin=24,
+        topMargin=24,
+        bottomMargin=24,
     )
-    table_rows_html = "".join(
-        "<tr>"
-        + "".join(
-            f"<td>{escape(str(appointment.get(key, '-') if key != 'doctorFee' else appointment.get(key, 0)))}</td>"
-            for _, key in REPORT_COLUMNS
-        )
-        + "</tr>"
-        for appointment in appointments
-    )
-    if not table_rows_html:
-        table_rows_html = (
-            '<tr><td colspan="7" style="text-align:center;">No appointments found</td></tr>'
-        )
 
-    html = f"""
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <style>
-          @page {{
-            size: A4 landscape;
-            margin: 16mm;
-          }}
-          body {{
-            font-family: Arial, sans-serif;
-            color: #111827;
-            font-size: 11px;
-          }}
-          h1 {{
-            margin: 0 0 8px 0;
-            font-size: 20px;
-          }}
-          .meta {{
-            margin: 4px 0;
-            font-size: 12px;
-          }}
-          table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 14px;
-          }}
-          th, td {{
-            border: 1px solid #d1d5db;
-            padding: 8px;
-            text-align: left;
-            vertical-align: top;
-          }}
-          th {{
-            background: #f3f4f6;
-            font-weight: 700;
-          }}
-        </style>
-      </head>
-      <body>
-        <h1>Appointments Report</h1>
-        <p class="meta"><strong>Date Range:</strong> {escape(date_range)}</p>
-        <p class="meta"><strong>Total Appointments:</strong> {len(appointments)}</p>
-        <p class="meta"><strong>Generated On:</strong> {escape(generated_on)}</p>
-        <table>
-          <thead>
-            <tr>{table_header_html}</tr>
-          </thead>
-          <tbody>
-            {table_rows_html}
-          </tbody>
-        </table>
-      </body>
-    </html>
-    """
+    styles = getSampleStyleSheet()
+    elements = [
+        Paragraph("Appointments Report", styles["Title"]),
+        Spacer(1, 8),
+        Paragraph(f"Date Range: {date_range}", styles["Normal"]),
+        Paragraph(f"Total Appointments: {len(appointments)}", styles["Normal"]),
+        Paragraph(f"Generated On: {generated_on}", styles["Normal"]),
+        Spacer(1, 12),
+    ]
 
-    pdf_bytes = HTML(string=html).write_pdf()
+    table_data: list[list[str]] = [[column_title for column_title, _ in REPORT_COLUMNS]]
+    if appointments:
+        for appointment in appointments:
+            table_data.append(
+                [
+                    str(appointment.get("customerName", "-")),
+                    str(appointment.get("phone", "-")),
+                    str(appointment.get("petName", "-")),
+                    str(appointment.get("petType", "-")),
+                    str(appointment.get("date", "-")),
+                    str(appointment.get("doctorFee", 0)),
+                    str(appointment.get("status", "active")),
+                ]
+            )
+    else:
+        table_data.append(["No appointments found", "", "", "", "", "", ""])
+
+    table = Table(table_data, repeatRows=1)
+    table_style_commands = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+    ]
+    if not appointments:
+        table_style_commands.extend(
+            [
+                ("SPAN", (0, 1), (-1, 1)),
+                ("ALIGN", (0, 1), (-1, 1), "CENTER"),
+            ]
+        )
+    table.setStyle(TableStyle(table_style_commands))
+
+    elements.append(table)
+    doc.build(elements)
+    output.seek(0)
+
     filename = f"appointments_report_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.pdf"
     return StreamingResponse(
-        io.BytesIO(pdf_bytes),
+        output,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
