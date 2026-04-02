@@ -8,6 +8,7 @@ from app.core.firebase import get_firestore
 from app.schemas.drug import (
     DrugCreate,
     DrugEntryCreate,
+    DrugQuantityAdjustmentCreate,
     DrugNameUpdate,
     DrugTemplateCreate,
 )
@@ -43,12 +44,42 @@ def _build_history_entry(
     return {
         "id": f"entry_{uuid4().hex}",
         "date": date,
+        "entryType": "stock_entry",
         "quantity": qty,
         "price": unit_price,
         "gstPercent": gst_value,
         "baseAmount": base_amount,
         "gstAmount": gst_amount,
         "totalBill": base_amount + gst_amount,
+        "reason": "Stock purchase",
+        # "remark": "",
+    }
+
+
+def _build_adjustment_entry(
+    date: str,
+    adjustment_type: str,
+    quantity: float,
+    reason: str,
+    # remark: str | None,
+) -> dict[str, Any]:
+    normalized_adjustment = (adjustment_type or "").strip().lower()
+    qty = _normalize_number(quantity)
+    signed_quantity = qty if normalized_adjustment == "add" else -qty
+
+    return {
+        "id": f"entry_{uuid4().hex}",
+        "date": date,
+        "entryType": "adjustment",
+        "adjustmentType": normalized_adjustment,
+        "quantity": signed_quantity,
+        "price": 0,
+        "gstPercent": 0,
+        "baseAmount": 0,
+        "gstAmount": 0,
+        "totalBill": 0,
+        "reason": (reason or "").strip(),
+        # "remark": (remark or "").strip(),
     }
 
 
@@ -57,21 +88,35 @@ def _recalculate_drug_fields(drug_data: dict[str, Any]) -> dict[str, Any]:
     present_quantity = sum(
         _normalize_number(entry.get("quantity")) for entry in history
     )
+    if present_quantity < 0:
+        present_quantity = 0
     total_bill = sum(_normalize_number(entry.get("totalBill")) for entry in history)
 
-    latest_entry = history[0] if history else None
-    oldest_entry = history[-1] if history else None
+    purchase_entries = [
+        entry
+        for entry in history
+        if _normalize_number(entry.get("price")) > 0
+        or entry.get("entryType") == "stock_entry"
+    ]
+    latest_purchase_entry = purchase_entries[0] if purchase_entries else None
+    oldest_purchase_entry = purchase_entries[-1] if purchase_entries else None
 
     return {
         **drug_data,
         "presentQuantity": present_quantity,
         "totalBill": total_bill,
         "latestPrice": (
-            _normalize_number(latest_entry.get("price")) if latest_entry else 0
+            _normalize_number(latest_purchase_entry.get("price"))
+            if latest_purchase_entry
+            else 0
         ),
-        "lastAddedDate": latest_entry.get("date") if latest_entry else None,
+        "lastAddedDate": (
+            latest_purchase_entry.get("date") if latest_purchase_entry else None
+        ),
         "addedOn": (
-            oldest_entry.get("date") if oldest_entry else drug_data.get("addedOn")
+            oldest_purchase_entry.get("date")
+            if oldest_purchase_entry
+            else drug_data.get("addedOn")
         ),
     }
 
@@ -272,6 +317,58 @@ def add_drug_entry(drug_id: str, payload: DrugEntryCreate):
     )
     updated_history = [entry, *history]
 
+    updated = _recalculate_drug_fields({**current, "history": updated_history})
+    updated["updated_at"] = datetime.now(timezone.utc)
+
+    doc_ref.update(
+        {
+            "history": updated["history"],
+            "presentQuantity": updated["presentQuantity"],
+            "totalBill": updated["totalBill"],
+            "latestPrice": updated["latestPrice"],
+            "lastAddedDate": updated["lastAddedDate"],
+            "addedOn": updated["addedOn"],
+            "updated_at": updated["updated_at"],
+        }
+    )
+
+    return {"success": True}
+
+
+@router.post("/{drug_id}/adjustments")
+def adjust_drug_quantity(drug_id: str, payload: DrugQuantityAdjustmentCreate):
+    db = get_firestore()
+    doc_ref = db.collection("drugs").document(drug_id)
+    doc = doc_ref.get()
+
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Drug not found")
+
+    current = doc.to_dict() or {}
+    history = current.get("history") or []
+    current_quantity = _normalize_number(current.get("presentQuantity"))
+
+    adjustment_type = payload.adjustmentType.strip().lower()
+    adjustment_quantity = _normalize_number(payload.quantity)
+    if adjustment_type == "reduce" and adjustment_quantity > current_quantity:
+        raise HTTPException(
+            status_code=400,
+            detail="Insufficient stock to reduce the requested quantity",
+        )
+
+    reason = payload.reason.strip()
+    # if not reason:
+    #     raise HTTPException(status_code=422, detail="Reason is required")
+
+    entry = _build_adjustment_entry(
+        payload.date,
+        adjustment_type,
+        adjustment_quantity,
+        reason,
+        # payload.remark,
+    )
+
+    updated_history = [entry, *history]
     updated = _recalculate_drug_fields({**current, "history": updated_history})
     updated["updated_at"] = datetime.now(timezone.utc)
 

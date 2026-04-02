@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../app/layout/DashboardLayout";
 import {
@@ -11,14 +11,14 @@ import {
   Trash2,
   X,
   Package,
-  Hash,
+  SlidersHorizontal,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
+  adjustDrugQuantity,
   deleteDrugHistoryEntry,
   getAllDrugs,
   getDrugById,
-  updateDrug,
   updateDrugName,
 } from "@/services/drug_service";
 import ModuleHeader from "@/components/ui/ModuleHeader";
@@ -41,8 +41,6 @@ const formatCurrency = (value) =>
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
 
-const GST_OPTIONS = [0, 5, 12, 18, 28];
-
 export default function ListDrug() {
   const navigate = useNavigate();
   const today = new Date().toISOString().split("T")[0];
@@ -63,15 +61,16 @@ export default function ListDrug() {
   const hasPrev = cursorHistory.length > 0;
 
   const [isViewOpen, setIsViewOpen] = useState(false);
-  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isAdjustOpen, setIsAdjustOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedDrug, setSelectedDrug] = useState(null);
 
-  const [addForm, setAddForm] = useState({
+  const [adjustForm, setAdjustForm] = useState({
     date: today,
+    adjustmentType: "add",
     quantity: "",
-    price: "",
-    gstPercent: "0",
+    reason: "",
+    // remark: "",
   });
   const [editName, setEditName] = useState("");
   const [modalLoading, setModalLoading] = useState(false);
@@ -151,29 +150,17 @@ export default function ListDrug() {
   const paginatedDrugs = drugs;
   const displayedTotal = totalDrugs || drugs.length;
 
-  const addTotalAmount = useMemo(
-    () => Number(addForm.quantity || 0) * Number(addForm.price || 0),
-    [addForm.quantity, addForm.price],
-  );
-  const addGstAmount = useMemo(
-    () => (addTotalAmount * Number(addForm.gstPercent || 0)) / 100,
-    [addTotalAmount, addForm.gstPercent],
-  );
-  const addGrandTotalAmount = useMemo(
-    () => addTotalAmount + addGstAmount,
-    [addTotalAmount, addGstAmount],
-  );
-
   const closeAllModals = () => {
     setIsViewOpen(false);
-    setIsAddOpen(false);
+    setIsAdjustOpen(false);
     setIsEditOpen(false);
     setSelectedDrug(null);
-    setAddForm({
+    setAdjustForm({
       date: today,
+      adjustmentType: "add",
       quantity: "",
-      price: "",
-      gstPercent: "0",
+      reason: "",
+      // remark: "",
     });
     setEditName("");
   };
@@ -183,18 +170,19 @@ export default function ListDrug() {
     setIsViewOpen(true);
   };
 
-  const openAddModal = (drug) => {
+  const openAdjustModal = (drug) => {
     setSelectedDrug({
       id: drug.id,
       name: drug.name,
     });
-    setAddForm({
+    setAdjustForm({
       date: today,
+      adjustmentType: "add",
       quantity: "",
-      price: "",
-      gstPercent: String(drug.gstPercent ?? 0),
+      reason: "",
+      // remark: "",
     });
-    setIsAddOpen(true);
+    setIsAdjustOpen(true);
   };
 
   const openEditModal = (drug) => {
@@ -206,38 +194,44 @@ export default function ListDrug() {
     setIsEditOpen(true);
   };
 
-  const handleAddEntry = async (event) => {
+  const handleAdjustEntry = async (event) => {
     event.preventDefault();
     if (!selectedDrug?.id) return;
 
-    if (!addForm.date) {
+    if (!adjustForm.date) {
       toast.error("Date is required.");
       return;
     }
-    if (!addForm.quantity || Number(addForm.quantity) <= 0) {
+    if (!adjustForm.quantity || Number(adjustForm.quantity) <= 0) {
       toast.error("Quantity must be greater than 0.");
       return;
     }
-    if (!addForm.price || Number(addForm.price) <= 0) {
-      toast.error("Price must be greater than 0.");
-      return;
-    }
+    // if (!adjustForm.reason.trim()) {
+    //   toast.error("Reason is required.");
+    //   return;
+    // }
 
     try {
       setModalLoading(true);
-      await updateDrug(selectedDrug.id, {
-        date: addForm.date,
-        quantity: Number(addForm.quantity),
-        price: Number(addForm.price),
-        gstPercent: Number(addForm.gstPercent || 0),
+      await adjustDrugQuantity(selectedDrug.id, {
+        date: adjustForm.date,
+        adjustmentType: adjustForm.adjustmentType,
+        quantity: Number(adjustForm.quantity),
+        reason: adjustForm.reason.trim(),
+        // remark: adjustForm.remark.trim(),
       });
       await fetchDrugs();
       await refreshSelectedDrug(selectedDrug.id);
-      toast.success("Drug entry added successfully.");
-      setIsAddOpen(false);
+      toast.success("Drug quantity adjusted successfully.");
+      setIsAdjustOpen(false);
       setIsViewOpen(true);
-    } catch {
-      toast.error("Failed to add entry.");
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      if (detail === "Insufficient stock to reduce the requested quantity") {
+        toast.error(detail);
+      } else {
+        toast.error("Failed to adjust quantity.");
+      }
     } finally {
       setModalLoading(false);
     }
@@ -379,7 +373,6 @@ export default function ListDrug() {
                   <tr className="border-b border-gray-200 bg-gray-50">
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
                       <span className="inline-flex items-center gap-1">
-                        {/* <Hash size={14} /> */}
                         S.No
                       </span>
                     </th>
@@ -425,11 +418,11 @@ export default function ListDrug() {
                             <Eye size={16} />
                           </button>
                           <button
-                            onClick={() => openAddModal(drug)}
-                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition duration-150"
-                            title="Add"
+                            onClick={() => openAdjustModal(drug)}
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 transition duration-150"
+                            title="Adjust Quantity"
                           >
-                            <Plus size={16} />
+                            <SlidersHorizontal size={16} />
                           </button>
                           <button
                             onClick={() => openEditModal(drug)}
@@ -468,11 +461,11 @@ export default function ListDrug() {
                       <Eye size={16} />
                     </button>
                     <button
-                      onClick={() => openAddModal(drug)}
-                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition duration-150"
-                      title="Add"
+                      onClick={() => openAdjustModal(drug)}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 transition duration-150"
+                      title="Adjust Quantity"
                     >
-                      <Plus size={16} />
+                      <SlidersHorizontal size={16} />
                     </button>
                     <button
                       onClick={() => openEditModal(drug)}
@@ -516,15 +509,15 @@ export default function ListDrug() {
         )}
       </div>
 
-      {(isViewOpen || isAddOpen || isEditOpen) && (
+      {(isViewOpen || isAdjustOpen || isEditOpen) && (
         <div className="fixed inset-0 z-50 bg-gray-100/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-800">
                 {isViewOpen
                   ? "Drug Details"
-                  : isAddOpen
-                    ? "Add Drug Entry"
+                  : isAdjustOpen
+                    ? "Adjust Drug Quantity"
                     : "Edit Drug Name"}
               </h2>
               <button
@@ -592,6 +585,9 @@ export default function ListDrug() {
                                 Date
                               </th>
                               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                                Entry Type
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
                                 Quantity
                               </th>
                               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
@@ -607,6 +603,12 @@ export default function ListDrug() {
                                 Total
                               </th>
                               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                                Reason
+                              </th>
+                              {/* <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                                Remark
+                              </th> */}
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
                                 Delete
                               </th>
                             </tr>
@@ -621,6 +623,13 @@ export default function ListDrug() {
                                   {formatDate(entry.date)}
                                 </td>
                                 <td className="px-4 py-3 text-sm text-gray-700">
+                                  {entry.entryType === "adjustment"
+                                    ? `Adjustment (${entry.adjustmentType || "-"})`
+                                    : "Stock Entry"}
+                                </td>
+                                <td
+                                  className={`px-4 py-3 text-sm font-semibold ${Number(entry.quantity || 0) < 0 ? "text-red-600" : "text-green-700"}`}
+                                >
                                   {entry.quantity}
                                 </td>
                                 <td className="px-4 py-3 text-sm text-gray-700">
@@ -635,6 +644,12 @@ export default function ListDrug() {
                                 <td className="px-4 py-3 text-sm text-gray-700">
                                   {formatCurrency(entry.totalBill)}
                                 </td>
+                                <td className="px-4 py-3 text-sm text-gray-700">
+                                  {entry.reason || "-"}
+                                </td>
+                                {/* <td className="px-4 py-3 text-sm text-gray-700">
+                                  {entry.remark || "-"}
+                                </td> */}
                                 <td className="px-4 py-3 text-sm text-gray-700">
                                   <button
                                     onClick={() =>
@@ -658,10 +673,10 @@ export default function ListDrug() {
                 </div>
               )}
 
-              {isAddOpen && selectedDrug && (
-                <form onSubmit={handleAddEntry} className="space-y-5">
+              {isAdjustOpen && selectedDrug && (
+                <form onSubmit={handleAdjustEntry} className="space-y-5">
                   <p className="text-sm text-gray-600">
-                    Add stock entry for{" "}
+                    Adjust stock for{" "}
                     <span className="font-semibold">{selectedDrug.name}</span>
                   </p>
 
@@ -673,9 +688,9 @@ export default function ListDrug() {
                       <input
                         type="date"
                         name="date"
-                        value={addForm.date}
+                        value={adjustForm.date}
                         onChange={(event) =>
-                          setAddForm((prev) => ({
+                          setAdjustForm((prev) => ({
                             ...prev,
                             date: event.target.value,
                           }))
@@ -686,15 +701,35 @@ export default function ListDrug() {
 
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Adjustment Type
+                      </label>
+                      <select
+                        name="adjustmentType"
+                        value={adjustForm.adjustmentType}
+                        onChange={(event) =>
+                          setAdjustForm((prev) => ({
+                            ...prev,
+                            adjustmentType: event.target.value,
+                          }))
+                        }
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition bg-white"
+                      >
+                        <option value="add">Add Quantity</option>
+                        <option value="reduce">Reduce Quantity</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
                         Quantity
                       </label>
                       <input
                         type="number"
                         min="1"
                         name="quantity"
-                        value={addForm.quantity}
+                        value={adjustForm.quantity}
                         onChange={(event) =>
-                          setAddForm((prev) => ({
+                          setAdjustForm((prev) => ({
                             ...prev,
                             quantity: event.target.value,
                           }))
@@ -706,65 +741,41 @@ export default function ListDrug() {
 
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Price
+                        Reason
                       </label>
                       <input
-                        type="number"
-                        min="1"
-                        step="0.01"
-                        name="price"
-                        value={addForm.price}
+                        type="text"
+                        name="reason"
+                        value={adjustForm.reason}
                         onChange={(event) =>
-                          setAddForm((prev) => ({
+                          setAdjustForm((prev) => ({
                             ...prev,
-                            price: event.target.value,
+                            reason: event.target.value,
                           }))
                         }
-                        placeholder="Enter price"
+                        placeholder="Why are you adjusting this stock?"
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
                       />
                     </div>
 
-                    <div>
+                    {/* <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        GST (%)
+                        Remark
                       </label>
-                      <select
-                        name="gstPercent"
-                        value={addForm.gstPercent}
+                      <textarea
+                        name="remark"
+                        value={adjustForm.remark}
                         onChange={(event) =>
-                          setAddForm((prev) => ({
+                          setAdjustForm((prev) => ({
                             ...prev,
-                            gstPercent: event.target.value,
+                            remark: event.target.value,
                           }))
                         }
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition bg-white"
-                      >
-                        {GST_OPTIONS.map((option) => (
-                          <option key={option} value={String(option)}>
-                            {option}%
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        GST Amount
-                      </label>
-                      <div className="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-800 font-semibold">
-                        {formatCurrency(addGstAmount)}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Total Amount
-                      </label>
-                      <div className="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-800 font-semibold">
-                        {formatCurrency(addGrandTotalAmount)}
-                      </div>
-                    </div>
+                        rows={3}
+                        placeholder="Optional note"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition resize-none"
+                      ></textarea>
+                    </div> */}
                   </div>
 
                   <div className="flex justify-end">
@@ -773,7 +784,7 @@ export default function ListDrug() {
                       disabled={modalLoading}
                       className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 disabled:opacity-50 text-white font-semibold py-2.5 px-5 rounded-lg transition duration-200 shadow-md hover:shadow-lg"
                     >
-                      {modalLoading ? "Saving..." : "Save Entry"}
+                      {modalLoading ? "Saving..." : "Save Adjustment"}
                     </button>
                   </div>
                 </form>

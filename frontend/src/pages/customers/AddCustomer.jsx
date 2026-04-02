@@ -94,30 +94,6 @@ export default function AddCustomer() {
       newErrors.petAgeMonths = "Pet age (months) must be between 0 and 11.";
     }
 
-    if (
-      formData.petName.trim() ||
-      formData.petType.trim() ||
-      formData.petBreed.trim() ||
-      formData.petSex.trim() ||
-      formData.petAgeYears.trim() ||
-      formData.petAgeMonths.trim()
-    )
-      if (formData.vaccinated === "Yes" && !formData.vaccinationStartDate) {
-        newErrors.vaccinationStartDate = "Vaccination date is required.";
-      }
-
-    if (formData.vaccinated === "Yes" && !formData.vaccinationEndDate) {
-      newErrors.vaccinationEndDate = "Vaccination next due date is required.";
-    }
-
-    if (formData.deworming === "Yes" && !formData.dewormingStartDate) {
-      newErrors.dewormingStartDate = "Deworming start date is required.";
-    }
-
-    if (formData.deworming === "Yes" && !formData.dewormingNextDueDate) {
-      newErrors.dewormingNextDueDate = "Deworming next due date is required.";
-    }
-
     setErrors(newErrors);
 
     return Object.keys(newErrors).length === 0;
@@ -145,14 +121,22 @@ export default function AddCustomer() {
         petSex: formData.petSex,
         vaccinated: formData.vaccinated.trim(),
         vaccinationStartDate:
-          formData.vaccinated === "Yes" ? formData.vaccinationStartDate : null,
+          formData.vaccinated === "Yes"
+            ? formData.vaccinationStartDate || null
+            : null,
         vaccinationEndDate:
-          formData.vaccinated === "Yes" ? formData.vaccinationEndDate : null,
+          formData.vaccinated === "Yes"
+            ? formData.vaccinationEndDate || null
+            : null,
         deworming: formData.deworming.trim(),
         dewormingStartDate:
-          formData.deworming === "Yes" ? formData.dewormingStartDate : null,
+          formData.deworming === "Yes"
+            ? formData.dewormingStartDate || null
+            : null,
         dewormingNextDueDate:
-          formData.deworming === "Yes" ? formData.dewormingNextDueDate : null,
+          formData.deworming === "Yes"
+            ? formData.dewormingNextDueDate || null
+            : null,
         notes: formData.notes.trim(),
       };
       console.log("Submitting Customer Payload:", payload);

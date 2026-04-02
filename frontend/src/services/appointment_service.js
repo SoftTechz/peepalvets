@@ -2,13 +2,13 @@ import api from "@/config/axios";
 
 // Create appointment
 export const createAppointment = async (payload) => {
-  const res = await api.post("/appointments", payload);
+  const res = await api.post("/appointments/", payload);
   return res.data;
 };
 
 // Get appointments
 export const getAllAppointments = async (params = {}) => {
-  const res = await api.get("/appointments", { params });
+  const res = await api.get("/appointments/", { params });
   return res.data;
 };
 
@@ -29,14 +29,6 @@ export const deleteAppointment = async (appointmentId) => {
   const res = await api.delete(`/appointments/${appointmentId}`);
   return res.data;
 };
-
-// Change only status
-// export const updateAppointmentStatus = async (appointmentId, status) => {
-//   const res = await api.patch(`/appointments/${appointmentId}/status`, null, {
-//     params: { status },
-//   });
-//   return res.data;
-// };
 
 export const getAppointmentPDF = async (appointmentId) => {
   const res = await api.get(`/appointments/${appointmentId}/pdf`, {

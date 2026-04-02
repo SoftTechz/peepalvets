@@ -19,6 +19,14 @@ class DrugEntryCreate(BaseModel):
     gstPercent: float = Field(default=0, ge=0)
 
 
+class DrugQuantityAdjustmentCreate(BaseModel):
+    date: str
+    adjustmentType: str = Field(..., pattern="^(add|reduce)$")
+    quantity: float = Field(..., gt=0)
+    reason: str
+    # remark: Optional[str] = None
+
+
 class DrugNameUpdate(BaseModel):
     name: str = Field(..., min_length=1)
 

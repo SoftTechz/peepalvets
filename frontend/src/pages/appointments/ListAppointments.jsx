@@ -374,6 +374,13 @@ export default function ListAppointments() {
               {/* Modal Footer */}
               <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
                 <button
+                  onClick={closePdfModal}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition"
+                >
+                  <X size={18} />
+                  Close
+                </button>
+                <button
                   onClick={handlePrint}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition"
                 >

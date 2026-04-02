@@ -276,7 +276,7 @@
       }
 
       // Function to populate the template
-      function populateTemplate(appointment, customer) {
+      function populateTemplate(appointment) {
         // Helper to safely format dates
         const formatDate = (dateStr) => {
           if (!dateStr) return new Date().toLocaleDateString("en-IN");
@@ -287,20 +287,20 @@
         };
 
         // Calculate age
-        const ageYears = appointment.petAgeYears || customer.petAgeYears || 0;
-        const ageMonths =
-          appointment.petAgeMonths || customer.petAgeMonths || 0;
+        const ageYears = appointment.petAgeYears || 0;
+        const ageMonths = appointment.petAgeMonths || 0;
         const age = ageYears > 0 ? `${ageYears}y` : "";
         const ageStr = ageMonths > 0 ? `${age} ${ageMonths}m` : age || "-";
 
         // Map data fields to template IDs
         const fieldMappings = {
-          owner_name: appointment.customerName || customer.name || "-",
-          phone: appointment.phone || customer.phone || "-",
-          pet_name: appointment.petName || customer.petName || "-",
-          address: customer.address || "-",
-          species: appointment.petType || customer.petType || "-",
-          sex: appointment.petSex || customer.petSex || "-",
+          owner_name: appointment.customerName || "-",
+          phone: appointment.phone || "-",
+          pet_name: appointment.petName || "-",
+          address: appointment.address || "-",
+          species: appointment.petType || "-",
+          sex: appointment.petSex || "-",
+          pet_breed: appointment.petBreed || "-",
           age: ageStr,
           temperature: appointment.temperature || "-",
           cmm: appointment.cmm || "-",
@@ -389,23 +389,7 @@
           const appointmentData = await appointmentResponse.json();
           const appointment = appointmentData.appointment;
 
-          // Fetch customer
-          let customer = {};
-          if (appointment.customerId) {
-            try {
-              const customerResponse = await fetch(
-                `${apiBase}/customers/${appointment.customerId}`,
-              );
-              if (customerResponse.ok) {
-                const customerData = await customerResponse.json();
-                customer = customerData.customer || {};
-              }
-            } catch (error) {
-              console.warn("Error fetching customer data:", error);
-            }
-          }
-
-          populateTemplate(appointment, customer);
+          populateTemplate(appointment);
         } catch (error) {
           console.error("Error loading appointment data:", error);
           // Show error in the page

@@ -2,7 +2,7 @@ import api from "@/config/axios";
 
 // Create customer
 export const createCustomer = async (payload) => {
-  const res = await api.post("/customers", payload);
+  const res = await api.post("/customers/", payload);
   console.log("Create Customer Response:", res.data);
   return res.data;
 };
@@ -22,7 +22,7 @@ export const deleteCustomer = async (customerId) => {
 
 // Get all customers with pagination and optional server-side search
 export const getAllCustomers = async (params = {}) => {
-  const res = await api.get("/customers", { params });
+  const res = await api.get("/customers/", { params });
   return res.data;
 };
 

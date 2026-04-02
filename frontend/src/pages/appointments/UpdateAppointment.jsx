@@ -128,6 +128,7 @@ export default function UpdateAppointment() {
     drugName: "",
     unit: "mg",
     quantity: "",
+    route: "I/V",
   });
 
   const [medicineForm, setMedicineForm] = useState({
@@ -497,7 +498,7 @@ export default function UpdateAppointment() {
 
   const appendTreatmentDrug = () => {
     if (isReadOnly) return;
-    const { drugName, unit, quantity } = treatmentDrugFields;
+    const { drugName, unit, quantity, route } = treatmentDrugFields;
 
     if (!drugName.trim()) {
       toast.error("Please select Drug Name");
@@ -508,7 +509,7 @@ export default function UpdateAppointment() {
       return;
     }
 
-    const formattedLine = `${drugName}-${quantity}${unit}`;
+    const formattedLine = `${drugName}-${quantity}${unit} (${route})`;
     setFormData((prev) => ({
       ...prev,
       treatment: prev.treatment
@@ -519,6 +520,8 @@ export default function UpdateAppointment() {
     setTreatmentDrugFields({
       drugName: "",
       quantity: "",
+      unit: "mg",
+      route: "I/V",
     });
 
     // Keep entered fields for repeat clicks but allow user to clear manually
@@ -1390,6 +1393,24 @@ export default function UpdateAppointment() {
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Quantity
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={treatmentDrugFields.quantity}
+                        onChange={(e) =>
+                          setTreatmentDrugFields((prev) => ({
+                            ...prev,
+                            quantity: e.target.value,
+                          }))
+                        }
+                        disabled={isReadOnly}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition disabled:bg-gray-100 disabled:text-gray-700"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
                         Unit
                       </label>
                       <select
@@ -1412,21 +1433,25 @@ export default function UpdateAppointment() {
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Quantity
+                        Route
                       </label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={treatmentDrugFields.quantity}
+                      <select
+                        value={treatmentDrugFields.route}
                         onChange={(e) =>
                           setTreatmentDrugFields((prev) => ({
                             ...prev,
-                            quantity: e.target.value,
+                            route: e.target.value,
                           }))
                         }
                         disabled={isReadOnly}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition disabled:bg-gray-100 disabled:text-gray-700"
-                      />
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition bg-white disabled:bg-gray-100 disabled:text-gray-700"
+                      >
+                        {["I/V", "I/M", "S/C", "P/O"].map((route) => (
+                          <option key={route} value={route}>
+                            {route}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <button

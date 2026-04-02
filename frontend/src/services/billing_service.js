@@ -1,7 +1,7 @@
 import api from "@/config/axios";
 
 export const createBilling = async (payload) => {
-  const res = await api.post("/billing", payload);
+  const res = await api.post("/billing/", payload);
   return res.data;
 };
 
@@ -11,7 +11,7 @@ export const updateBilling = async (billingId, payload) => {
 };
 
 export const getAllBilling = async (params = {}) => {
-  const res = await api.get("/billing", { params });
+  const res = await api.get("/billing/", { params });
   return res.data;
 };
 
