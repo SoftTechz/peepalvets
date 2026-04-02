@@ -17,6 +17,9 @@ import {
 } from "@/services/dashboard_service";
 import DashboardLayout from "../../app/layout/DashboardLayout";
 
+const DASHBOARD_BANNER_URL = "/peepalvetsbanner2.png";
+const DASHBOARD_ASSET_CACHE = "peepal-assets-v1";
+
 function formatStatus(qty) {
   if (qty < 20)
     return {
@@ -43,6 +46,50 @@ export default function HospitalDashboard() {
   const [stats, setStats] = useState(null);
   const [drugs, setDrugs] = useState([]);
   const [error, setError] = useState(null);
+  const [bannerSrc, setBannerSrc] = useState(DASHBOARD_BANNER_URL);
+
+  useEffect(() => {
+    let canceled = false;
+    let objectUrl = null;
+
+    async function loadBannerFromCache() {
+      if (typeof window === "undefined" || !("caches" in window)) {
+        return;
+      }
+
+      try {
+        const cache = await window.caches.open(DASHBOARD_ASSET_CACHE);
+        let cachedResponse = await cache.match(DASHBOARD_BANNER_URL);
+
+        if (!cachedResponse) {
+          const networkResponse = await fetch(DASHBOARD_BANNER_URL);
+          if (networkResponse.ok) {
+            await cache.put(DASHBOARD_BANNER_URL, networkResponse.clone());
+            cachedResponse = networkResponse;
+          }
+        }
+
+        if (!cachedResponse) return;
+
+        const blob = await cachedResponse.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (!canceled) {
+          setBannerSrc(objectUrl);
+        }
+      } catch (caught) {
+        console.warn("Unable to cache dashboard banner:", caught);
+      }
+    }
+
+    loadBannerFromCache();
+
+    return () => {
+      canceled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     async function loadDashboard() {
@@ -183,7 +230,7 @@ export default function HospitalDashboard() {
         <div className="max-w-[1300px] mx-auto space-y-6">
           <section className="rounded-2xl overflow-hidden shadow-lg shadow-purple-200/60">
             <img
-              src="peepalvetsbanner2.png"
+              src={bannerSrc}
               alt="dashboard banner"
               className="w-full h-48 sm:h-56 lg:h-64 object-cover"
             />

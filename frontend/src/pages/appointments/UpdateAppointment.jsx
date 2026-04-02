@@ -181,7 +181,7 @@ export default function UpdateAppointment() {
 
   const fetchDrugs = async () => {
     try {
-      const response = await getDrugNameAndQuantity({ limit: 500 });
+      const response = await getDrugNameAndQuantity({ limit: 1000 });
       setDrugs(response.drugs || []);
     } catch (err) {
       console.error("Failed to load drugs:", err);

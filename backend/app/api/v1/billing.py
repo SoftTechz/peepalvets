@@ -167,7 +167,7 @@ def update_billing(billing_id: str, payload: BillingUpdate):
 
 @router.get("/")
 def get_all_billing(
-    limit: int = Query(5, ge=1, le=100),
+    limit: int = Query(10, ge=1, le=100),
     cursor: str | None = Query(None),
     search: str | None = Query(None, min_length=1),
 ):
