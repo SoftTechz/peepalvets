@@ -285,15 +285,15 @@ def get_all_customers(
     if has_next and selected_docs:
         next_cursor = selected_docs[-1].id
 
-    stats = get_dashboard_stats()
-    total_customers = int(stats.get("total_customers", 0) or 0)
+    # stats = get_dashboard_stats()
+    # total_customers = int(stats.get("total_customers", 0) or 0)
 
     return {
         "customers": customers,
         "limit": limit,
         "next_cursor": next_cursor,
         "has_next": has_next,
-        "total": total_customers,
+        # "total": total_customers,
     }
 
 

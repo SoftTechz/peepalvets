@@ -220,15 +220,15 @@ def get_all_billing(
 
     next_cursor = selected_docs[-1].id if has_next and selected_docs else None
 
-    stats = get_dashboard_stats()
-    total = int(stats.get("total_billing", 0) or 0)
+    # stats = get_dashboard_stats()
+    # total = int(stats.get("total_billing", 0) or 0)
 
     return {
         "billings": billings,
         "limit": limit,
         "next_cursor": next_cursor,
         "has_next": has_next,
-        "total": total,
+        # "total": total,
     }
 
 
