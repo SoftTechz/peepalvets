@@ -37,7 +37,7 @@ export default function ListCustomers() {
   const [cursorHistory, setCursorHistory] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
   const [hasNext, setHasNext] = useState(false);
-  const [totalCustomers, setTotalCustomers] = useState(0);
+  // const [totalCustomers, setTotalCustomers] = useState(0);
   const [customersPerPage] = useState(10);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const requestIdRef = useRef(0);
@@ -95,7 +95,7 @@ export default function ListCustomers() {
 
         const [customerResponse, statsResponse] = await Promise.all([
           getAllCustomers(params),
-          getDashboardStats(),
+          // getDashboardStats(),
         ]);
 
         if (requestId !== requestIdRef.current) {
@@ -105,7 +105,7 @@ export default function ListCustomers() {
         setCustomers(customerResponse.customers || []);
         setNextCursor(customerResponse.next_cursor || null);
         setHasNext(Boolean(customerResponse.has_next));
-        setTotalCustomers(statsResponse?.data?.total_customers ?? 0);
+        // setTotalCustomers(statsResponse?.data?.total_customers ?? 0);
       } catch (err) {
         if (requestIdRef.current) {
           setError("Failed to load customers. Please try again later.");
@@ -277,12 +277,12 @@ export default function ListCustomers() {
           }
         />
 
-        <div className="mb-4">
+        {/* <div className="mb-4">
           <p className="inline-flex items-center gap-2 text-sm text-purple-800 font-bold uppercase tracking-wide">
             <Users size={16} />
             Total Patients - {totalCustomers}
           </p>
-        </div>
+        </div> */}
 
         {/* Search Bar */}
         <div className="mb-6 relative">
