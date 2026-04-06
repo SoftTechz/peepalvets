@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import Any, Optional
+import time
 
 from fastapi import APIRouter, HTTPException, Query, logger
 
@@ -21,6 +22,13 @@ def _normalize_fields(data: dict[str, Any]) -> dict[str, Any]:
         else:
             normalized[key] = value
     return normalized
+
+
+def normalize_name(name: str | None) -> str | None:
+    if name is None:
+        return None
+    stripped = " ".join(name.strip().split())
+    return stripped.lower()
 
 
 def _validate_status(status: Optional[str]) -> Optional[str]:
@@ -105,6 +113,9 @@ def create_appointment(payload: AppointmentCreate):
         appointment_data = _normalize_fields(payload.model_dump())
         appointment_data["customerId"] = payload.customerId.strip()
         appointment_data["customerName"] = payload.customerName.strip()
+        appointment_data["customerName_lower"] = normalize_name(
+            appointment_data["customerName"]
+        )
         appointment_data["date"] = payload.date
         appointment_data["status"] = _validate_status(payload.status) or "active"
         appointment_data["scannedImages"] = appointment_data.get("scannedImages") or []
@@ -117,6 +128,9 @@ def create_appointment(payload: AppointmentCreate):
             appointment_data["customerName"] = (
                 customer_data.get("name") or ""
             ).strip() or appointment_data["customerName"]
+            appointment_data["customerName_lower"] = normalize_name(
+                appointment_data["customerName"]
+            )
             appointment_data["phone"] = customer_data.get(
                 "phone"
             ) or appointment_data.get("phone")
@@ -173,15 +187,75 @@ def create_appointment(payload: AppointmentCreate):
         raise HTTPException(status_code=500, detail=str(error))
 
 
+# @router.get("/")
+# def get_all_appointments(
+#     date: Optional[str] = Query(default=None),
+#     customer_id: Optional[str] = Query(default=None),
+#     status: Optional[str] = Query(default=None),
+#     minimal: bool = Query(default=False),
+# ):
+#     db = get_firestore()
+#     base_query = db.collection("appointments")
+#
+#     if minimal:
+#         base_query = base_query.select(
+#             [
+#                 "customerId",
+#                 "customerName",
+#                 "phone",
+#                 "petName",
+#                 "petAgeYears",
+#                 "petAgeMonths",
+#                 "petType",
+#                 "petBreed",
+#                 "petSex",
+#                 "vaccinated",
+#                 "vaccinationStartDate",
+#                 "vaccinationEndDate",
+#                 "deworming",
+#                 "date",
+#                 "time",
+#                 "status",
+#                 "created_at",
+#             ]
+#         )
+#
+#     query = base_query.order_by("created_at", direction="DESCENDING")
+#
+#     if date:
+#         query = query.where("date", "==", date)
+#     if customer_id:
+#         query = query.where("customerId", "==", customer_id)
+#     if status:
+#         normalized_status = _validate_status(status)
+#         query = query.where("status", "==", normalized_status)
+#
+#     docs = query.stream()
+#     appointments = []
+#     for doc in docs:
+#         appointment_data = doc.to_dict() or {}
+#         appointment_data["id"] = doc.id
+#         appointments.append(appointment_data)
+#
+#     return {"appointments": appointments}
+
+
 @router.get("/")
 def get_all_appointments(
     date: Optional[str] = Query(default=None),
     customer_id: Optional[str] = Query(default=None),
     status: Optional[str] = Query(default=None),
     minimal: bool = Query(default=False),
+    limit: int = Query(10, ge=1, le=100),
+    cursor: str | None = Query(None),
+    search: str | None = Query(None, min_length=1),
 ):
+    start_total = time.time()
+
+    t0 = time.time()
     db = get_firestore()
     base_query = db.collection("appointments")
+    print(f"[TIME] Appointments DB init: {time.time() - t0:.4f}s")
 
     if minimal:
         base_query = base_query.select(
@@ -206,7 +280,16 @@ def get_all_appointments(
             ]
         )
 
-    query = base_query.order_by("created_at", direction="DESCENDING")
+    t1 = time.time()
+    if search:
+        term = normalize_name(search) or ""
+        query = (
+            base_query.order_by("customerName_lower")
+            .start_at([term])
+            .end_at([f"{term}\uf8ff"])
+        )
+    else:
+        query = base_query.order_by("created_at", direction="DESCENDING")
 
     if date:
         query = query.where("date", "==", date)
@@ -216,14 +299,56 @@ def get_all_appointments(
         normalized_status = _validate_status(status)
         query = query.where("status", "==", normalized_status)
 
-    docs = query.stream()
+    count_query = query
+    print(f"[TIME] Appointments query build: {time.time() - t1:.4f}s")
+
+    t2 = time.time()
+    appointments_ref = db.collection("appointments")
+    if cursor:
+        cursor_doc = appointments_ref.document(cursor).get()
+        if cursor_doc.exists:
+            query = query.start_after(cursor_doc)
+    print(f"[TIME] Appointments cursor handling: {time.time() - t2:.4f}s")
+
+    query = query.limit(limit + 1)
+
+    t3 = time.time()
+    docs = list(query.stream())
+    print(f"[TIME] Appointments DB fetch (stream): {time.time() - t3:.4f}s")
+
+    has_next = len(docs) > limit
+    selected_docs = docs[:limit] if has_next else docs
+
+    t4 = time.time()
     appointments = []
-    for doc in docs:
+    for doc in selected_docs:
         appointment_data = doc.to_dict() or {}
         appointment_data["id"] = doc.id
         appointments.append(appointment_data)
+    print(f"[TIME] Appointments normalize: {time.time() - t4:.4f}s")
 
-    return {"appointments": appointments}
+    next_cursor = selected_docs[-1].id if has_next and selected_docs else None
+
+    t5 = time.time()
+    total = 0
+    try:
+        count_agg = count_query.count()
+        count_snapshot = count_agg.get()
+        if count_snapshot:
+            total = int(count_snapshot[0].value)
+    except Exception:
+        total = sum(1 for _ in count_query.stream())
+    print(f"[TIME] Appointments count query: {time.time() - t5:.4f}s")
+
+    print(f"[TIME] Appointments TOTAL API: {time.time() - start_total:.4f}s")
+
+    return {
+        "appointments": appointments,
+        "limit": limit,
+        "next_cursor": next_cursor,
+        "has_next": has_next,
+        "total": total,
+    }
 
 
 @router.get("/{appointment_id}")
@@ -261,6 +386,8 @@ def update_appointment(appointment_id: str, payload: AppointmentUpdate):
 
     if "customerName" in update_data and not update_data["customerName"]:
         raise HTTPException(status_code=422, detail="Customer name is required")
+    if "customerName" in update_data and update_data["customerName"]:
+        update_data["customerName_lower"] = normalize_name(update_data["customerName"])
 
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields provided for update")

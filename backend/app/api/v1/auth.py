@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from app.core.firebase import get_firestore
 from pydantic import BaseModel
+import time
 
 router = APIRouter()
 
@@ -14,19 +15,46 @@ class PinChangeRequest(BaseModel):
     new_pin: str
 
 
+# @router.post("/verify-pin")
+# def verify_pin(payload: PinVerifyRequest):
+#     db = get_firestore()
+#     doc = db.collection("Login").document("pin").get()
+#
+#     if not doc.exists:
+#         raise HTTPException(status_code=500, detail="PIN not configured")
+#
+#     saved_pin = doc.to_dict().get("login_pin")
+#
+#     if payload.pin != saved_pin:
+#         raise HTTPException(status_code=401, detail="Invalid PIN")
+#
+#     return {"success": True, "message": "PIN verified successfully"}
+
+
 @router.post("/verify-pin")
 def verify_pin(payload: PinVerifyRequest):
+    start_total = time.time()
+
+    t0 = time.time()
     db = get_firestore()
+    print(f"[TIME] Verify PIN DB init: {time.time() - t0:.4f}s")
+
+    t1 = time.time()
     doc = db.collection("Login").document("pin").get()
+    print(f"[TIME] Verify PIN fetch doc: {time.time() - t1:.4f}s")
 
     if not doc.exists:
         raise HTTPException(status_code=500, detail="PIN not configured")
 
+    t2 = time.time()
     saved_pin = doc.to_dict().get("login_pin")
+    is_valid = payload.pin == saved_pin
+    print(f"[TIME] Verify PIN compare: {time.time() - t2:.4f}s")
 
-    if payload.pin != saved_pin:
+    if not is_valid:
         raise HTTPException(status_code=401, detail="Invalid PIN")
 
+    print(f"[TIME] Verify PIN TOTAL API: {time.time() - start_total:.4f}s")
     return {"success": True, "message": "PIN verified successfully"}
 
 

@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
+import time
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -164,55 +165,128 @@ def create_drug(payload: DrugCreate):
         raise HTTPException(status_code=500, detail=str(error))
 
 
+# @router.get("/")
+# def get_all_drugs(
+#     limit: int = Query(10, ge=1, le=100),
+#     cursor: str | None = Query(None),
+#     search: str | None = Query(None),
+# ):
+#     db = get_firestore()
+#     drugs_ref = db.collection("drugs")
+#
+#     term = normalize_name(search) if search else None
+#
+#     if term:
+#         query = (
+#             drugs_ref.order_by("name_lower").start_at([term]).end_at([f"{term}\uf8ff"])
+#         )
+#         count_query = (
+#             drugs_ref.order_by("name_lower").start_at([term]).end_at([f"{term}\uf8ff"])
+#         )
+#     else:
+#         query = drugs_ref.order_by("created_at", direction="DESCENDING")
+#         count_query = drugs_ref
+#
+#     if cursor:
+#         cursor_doc = drugs_ref.document(cursor).get()
+#         if cursor_doc.exists:
+#             query = query.start_after(cursor_doc)
+#
+#     query = query.limit(limit + 1)
+#
+#     docs = list(query.stream())
+#     has_next = len(docs) > limit
+#     selected_docs = docs[:limit] if has_next else docs
+#
+#     drugs = []
+#     for doc in selected_docs:
+#         drug_data = doc.to_dict() or {}
+#         drug_data["id"] = doc.id
+#         drugs.append(drug_data)
+#
+#     next_cursor = selected_docs[-1].id if has_next and selected_docs else None
+#
+#     total = 0
+#     try:
+#         count_agg = count_query.count()
+#         count_snapshot = count_agg.get()
+#         if count_snapshot and len(count_snapshot) > 0:
+#             total = int(count_snapshot[0].value)
+#     except Exception:
+#         total = sum(1 for _ in count_query.stream())
+#
+#     return {
+#         "drugs": drugs,
+#         "limit": limit,
+#         "next_cursor": next_cursor,
+#         "has_next": has_next,
+#         "total": total,
+#     }
+
+
 @router.get("/")
 def get_all_drugs(
     limit: int = Query(10, ge=1, le=100),
     cursor: str | None = Query(None),
     search: str | None = Query(None),
 ):
+    start_total = time.time()
+
+    t0 = time.time()
     db = get_firestore()
     drugs_ref = db.collection("drugs")
+    print(f"[TIME] Drugs DB init: {time.time() - t0:.4f}s")
 
+    t1 = time.time()
     term = normalize_name(search) if search else None
-
     if term:
         query = (
             drugs_ref.order_by("name_lower").start_at([term]).end_at([f"{term}\uf8ff"])
         )
-        count_query = (
-            drugs_ref.order_by("name_lower").start_at([term]).end_at([f"{term}\uf8ff"])
-        )
+        count_query = query
     else:
         query = drugs_ref.order_by("created_at", direction="DESCENDING")
         count_query = drugs_ref
+    print(f"[TIME] Drugs query build: {time.time() - t1:.4f}s")
 
+    t2 = time.time()
     if cursor:
         cursor_doc = drugs_ref.document(cursor).get()
         if cursor_doc.exists:
             query = query.start_after(cursor_doc)
+    print(f"[TIME] Drugs cursor handling: {time.time() - t2:.4f}s")
 
     query = query.limit(limit + 1)
 
+    t3 = time.time()
     docs = list(query.stream())
+    print(f"[TIME] Drugs DB fetch (stream): {time.time() - t3:.4f}s")
+
     has_next = len(docs) > limit
     selected_docs = docs[:limit] if has_next else docs
 
+    t4 = time.time()
     drugs = []
     for doc in selected_docs:
         drug_data = doc.to_dict() or {}
         drug_data["id"] = doc.id
         drugs.append(drug_data)
+    print(f"[TIME] Drugs normalize: {time.time() - t4:.4f}s")
 
     next_cursor = selected_docs[-1].id if has_next and selected_docs else None
 
+    t5 = time.time()
     total = 0
     try:
         count_agg = count_query.count()
         count_snapshot = count_agg.get()
-        if count_snapshot and len(count_snapshot) > 0:
+        if count_snapshot:
             total = int(count_snapshot[0].value)
     except Exception:
         total = sum(1 for _ in count_query.stream())
+    print(f"[TIME] Drugs count query: {time.time() - t5:.4f}s")
+
+    print(f"[TIME] Drugs TOTAL API: {time.time() - start_total:.4f}s")
 
     return {
         "drugs": drugs,
