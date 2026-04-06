@@ -41,11 +41,11 @@ export default function ListAppointments() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [appointments, setAppointments] = useState([]);
-  const [appointmentTotals, setAppointmentTotals] = useState({
-    active: 0,
-    completed: 0,
-    cancelled: 0,
-  });
+  // const [appointmentTotals, setAppointmentTotals] = useState({
+  //   active: 0,
+  //   completed: 0,
+  //   cancelled: 0,
+  // });
   const [searchTerm, setSearchTerm] = useState("");
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [pdfAppointment, setPdfAppointment] = useState(null);
@@ -66,11 +66,11 @@ export default function ListAppointments() {
         minimal: true,
       });
       setAppointments(response.appointments || []);
-      setAppointmentTotals({
-        active: response.total_appointments_active || 0,
-        completed: response.total_appointments_completed || 0,
-        cancelled: response.total_appointments_cancelled || 0,
-      });
+      // setAppointmentTotals({
+      //   active: response.total_appointments_active || 0,
+      //   completed: response.total_appointments_completed || 0,
+      //   cancelled: response.total_appointments_cancelled || 0,
+      // });
     } catch (err) {
       setError("Failed to load appointments.");
       console.error("Error fetching appointments:", err);
@@ -163,6 +163,21 @@ export default function ListAppointments() {
     });
   }, [appointments, activeTab, searchTerm]);
 
+  const counts = useMemo(
+    () => ({
+      active: appointments.filter(
+        (item) => (item.status || "active").toLowerCase() === "active",
+      ).length,
+      completed: appointments.filter(
+        (item) => (item.status || "active").toLowerCase() === "completed",
+      ).length,
+      cancelled: appointments.filter(
+        (item) => (item.status || "active").toLowerCase() === "cancelled",
+      ).length,
+    }),
+    [appointments],
+  );
+
   return (
     <DashboardLayout>
       <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6 relative">
@@ -222,7 +237,7 @@ export default function ListAppointments() {
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
-              {tab} ({appointmentTotals[tab] || 0})
+              {tab} ({counts[tab] || 0})
             </button>
           ))}
         </div>

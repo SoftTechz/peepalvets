@@ -245,18 +245,18 @@ def get_all_appointments(
         appointment_data = doc.to_dict() or {}
         appointment_data["id"] = doc.id
         appointments.append(appointment_data)
-    stats = get_dashboard_stats()
+    # stats = get_dashboard_stats()
     return {
         "appointments": appointments,
-        "total_appointments_active": int(
-            stats.get("total_appointments_active", 0) or 0
-        ),
-        "total_appointments_completed": int(
-            stats.get("total_appointments_completed", 0) or 0
-        ),
-        "total_appointments_cancelled": int(
-            stats.get("total_appointments_cancelled", 0) or 0
-        ),
+        # "total_appointments_active": int(
+        #     stats.get("total_appointments_active", 0) or 0
+        # ),
+        # "total_appointments_completed": int(
+        #     stats.get("total_appointments_completed", 0) or 0
+        # ),
+        # "total_appointments_cancelled": int(
+        #     stats.get("total_appointments_cancelled", 0) or 0
+        # ),
     }
 
 
