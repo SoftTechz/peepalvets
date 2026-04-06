@@ -1571,8 +1571,7 @@ export default function UpdateAppointment() {
                     {["M", "A", "E", "N"].map((slot) => (
                       <input
                         key={slot}
-                        type="number"
-                        min="0"
+                        type="text"
                         placeholder={slot}
                         value={medicineForm.timing[slot]}
                         onChange={(e) =>

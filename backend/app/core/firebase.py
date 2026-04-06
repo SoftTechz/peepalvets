@@ -17,6 +17,8 @@ _db = None
 # Keep this for local testing with JSON file, do not use in production.
 # def get_firestore():
 
+#     logger.info("Initializing Firestore (test/local file)")
+
 #     global _db
 
 #     if _db:
