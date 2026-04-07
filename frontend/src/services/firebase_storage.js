@@ -4,7 +4,11 @@ import {
   getDownloadURL,
   deleteObject,
 } from "firebase/storage";
-import { storage } from "@/config/firebase_live";
+
+// ---------------Live Firebase Storage---------------------------
+// import { storage } from "@/config/firebase_live";
+// ---------------Test Firebase Storage---------------------------
+import { storage } from "@/config/firebase_test"; // Use this for testing with your own Firebase project
 import toast from "react-hot-toast";
 
 /**
