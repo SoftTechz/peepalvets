@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, logger
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.core.firebase import get_firestore
 from app.schemas.appointment import AppointmentCreate, AppointmentUpdate
@@ -91,7 +92,11 @@ def _reduce_drug_inventory(
         if quantity_to_reduce <= 0:
             continue
 
-        matched_drugs = list(drugs_ref.where("name", "==", drug_name).limit(1).stream())
+        matched_drugs = list(
+            drugs_ref.where(filter=FieldFilter("name", "==", drug_name))
+            .limit(1)
+            .stream()
+        )
         if not matched_drugs:
             continue
 
@@ -232,12 +237,12 @@ def get_all_appointments(
     query = base_query.order_by("created_at", direction="DESCENDING")
 
     if date:
-        query = query.where("date", "==", date)
+        query = query.where(filter=FieldFilter("date", "==", date))
     if customer_id:
-        query = query.where("customerId", "==", customer_id)
+        query = query.where(filter=FieldFilter("customerId", "==", customer_id))
     if status:
         normalized_status = _validate_status(status)
-        query = query.where("status", "==", normalized_status)
+        query = query.where(filter=FieldFilter("status", "==", normalized_status))
 
     docs = query.stream()
     appointments = []
